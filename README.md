@@ -2,6 +2,7 @@
 
 A clean, ad-free local music player for Android. No accounts. No internet. No nonsense.
 
+[![Build APK](https://github.com/Xbjornsen/BjornPlayer/actions/workflows/build.yml/badge.svg)](https://github.com/Xbjornsen/BjornPlayer/actions/workflows/build.yml)
 ![Platform](https://img.shields.io/badge/platform-Android-green?logo=android)
 ![Min SDK](https://img.shields.io/badge/minSdk-26%20(Oreo)-blue)
 ![Language](https://img.shields.io/badge/language-Kotlin-purple?logo=kotlin)
