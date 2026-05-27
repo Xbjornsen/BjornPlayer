@@ -1,0 +1,66 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - 'v*'           # trigger a Release on any tag like v1.0, v1.2.3
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:   # lets you trigger a build manually from the Actions tab
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      # ── Upload APK as a workflow artifact (available on every build) ─────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BjornPlayer-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # ── On a version tag, create a GitHub Release and attach the APK ─────────
+      - name: Rename APK for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          cp app/build/outputs/apk/debug/app-debug.apk BjornPlayer-${VERSION}.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BjornPlayer ${{ github.ref_name }}
+          body: |
+            ## BjornPlayer ${{ github.ref_name }}
+
+            ### Install
+            1. Download `BjornPlayer-${{ github.ref_name }}.apk` below
+            2. Transfer it to your Android phone
+            3. Open the file on your phone (you may need to allow *Install unknown apps* in Settings)
+
+            ### What's new
+            <!-- Add release notes here -->
+          files: BjornPlayer-${{ github.ref_name }}.apk
+          draft: false
+          prerelease: false
