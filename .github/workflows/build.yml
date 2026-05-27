@@ -13,6 +13,8 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create releases and upload assets
 
     steps:
       - name: Checkout code
