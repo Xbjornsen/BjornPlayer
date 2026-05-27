@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_songs"
+        android:icon="@drawable/ic_music_note"
+        android:title="@string/nav_songs" />
+    <item
+        android:id="@+id/nav_artists"
+        android:icon="@drawable/ic_person"
+        android:title="@string/nav_artists" />
+    <item
+        android:id="@+id/nav_albums"
+        android:icon="@drawable/ic_album"
+        android:title="@string/nav_albums" />
+    <item
+        android:id="@+id/nav_favourites"
+        android:icon="@drawable/ic_favorite"
+        android:title="@string/nav_favourites" />
+</menu>

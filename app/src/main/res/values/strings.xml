@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bjorn Player</string>
+    <string name="nav_songs">Songs</string>
+    <string name="nav_artists">Artists</string>
+    <string name="nav_albums">Albums</string>
+    <string name="nav_favourites">Favourites</string>
+</resources>
