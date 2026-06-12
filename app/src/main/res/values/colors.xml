@@ -16,6 +16,7 @@
     <color name="accent">#E85D2A</color>
     <color name="on_accent">#FFFFFF</color>         <!-- icon/text drawn on top of accent fills -->
     <color name="accent_muted">#22E85D2A</color>    <!-- low-alpha accent for icon circles / current row -->
+    <color name="danger">#C0392B</color>            <!-- destructive actions (delete) -->
 
     <!-- System required -->
     <color name="purple_200">#FFBB86FC</color>

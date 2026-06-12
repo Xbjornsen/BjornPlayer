@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="16dp"
+            android:text="Settings"
+            android:textColor="@color/text_primary"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <!-- ── Appearance ─────────────────────────────────────────────── -->
+        <TextView style="@style/SettingsHeader" android:text="Appearance" />
+
+        <LinearLayout android:id="@+id/settings_theme" style="@style/SettingsRow">
+            <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_brightness" />
+            <LinearLayout style="@style/SettingsRowText">
+                <TextView style="@style/SettingsRowTitle" android:text="Theme" />
+                <TextView android:id="@+id/settings_theme_value" style="@style/SettingsRowSubtitle"
+                    android:text="System default" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ── Playback ───────────────────────────────────────────────── -->
+        <TextView style="@style/SettingsHeader" android:text="Playback" />
+
+        <LinearLayout android:id="@+id/settings_autoplay" style="@style/SettingsRow">
+            <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_shuffle" />
+            <LinearLayout style="@style/SettingsRowText">
+                <TextView style="@style/SettingsRowTitle" android:text="Shuffle &amp; play on launch" />
+                <TextView style="@style/SettingsRowSubtitle"
+                    android:text="Start a random song when the app opens" />
+            </LinearLayout>
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/settings_autoplay_switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="false"
+                android:focusable="false" />
+        </LinearLayout>
+
+        <!-- ── Library ────────────────────────────────────────────────── -->
+        <TextView style="@style/SettingsHeader" android:text="Library" />
+
+        <LinearLayout android:id="@+id/settings_rescan" style="@style/SettingsRow">
+            <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_refresh" />
+            <LinearLayout style="@style/SettingsRowText">
+                <TextView style="@style/SettingsRowTitle" android:text="Rescan music library" />
+                <TextView style="@style/SettingsRowSubtitle" android:text="Look for new or removed songs" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ── Updates ────────────────────────────────────────────────── -->
+        <TextView style="@style/SettingsHeader" android:text="Updates" />
+
+        <LinearLayout android:id="@+id/settings_check_updates" style="@style/SettingsRow">
+            <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_download" />
+            <LinearLayout style="@style/SettingsRowText">
+                <TextView style="@style/SettingsRowTitle" android:text="Check for updates" />
+                <TextView android:id="@+id/settings_version" style="@style/SettingsRowSubtitle"
+                    android:text="Version 1.0" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ── About ──────────────────────────────────────────────────── -->
+        <TextView style="@style/SettingsHeader" android:text="About" />
+
+        <LinearLayout android:id="@+id/settings_github" style="@style/SettingsRow">
+            <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_info" />
+            <LinearLayout style="@style/SettingsRowText">
+                <TextView style="@style/SettingsRowTitle" android:text="View source on GitHub" />
+                <TextView style="@style/SettingsRowSubtitle" android:text="github.com/Xbjornsen/BjornPlayer" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/settings_about_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="20dp"
+            android:gravity="center"
+            android:text="BjornPlayer"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+</ScrollView>

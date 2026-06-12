@@ -15,4 +15,5 @@
     <color name="accent">#FF7A45</color>
     <color name="on_accent">#20150E</color>         <!-- dark icon/text on the bright orange fill -->
     <color name="accent_muted">#33FF7A45</color>    <!-- low-alpha accent for icon circles / current row -->
+    <color name="danger">#FF6B6B</color>            <!-- destructive actions (delete) -->
 </resources>

@@ -57,6 +57,18 @@ class SongOptionsFragment : BottomSheetDialogFragment() {
         binding.soInfo.setOnClickListener {
             showSongInfo(song)
         }
+
+        binding.soDelete.setOnClickListener {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Delete from device?")
+                .setMessage("\"${song.title}\" will be permanently deleted from your phone. This can't be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete") { _, _ ->
+                    (activity as? MainActivity)?.deleteSong(song)
+                    dismiss()
+                }
+                .show()
+        }
     }
 
     private fun refreshFavouriteOption(songId: Long) {

@@ -1,15 +1,19 @@
 package com.bjorntech.player
 
 import android.Manifest
+import android.app.RecoverableSecurityException
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -61,6 +65,28 @@ class MainActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "Storage permission needed to read music files", Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** Song awaiting a system delete confirmation / write permission. */
+    private var pendingDeleteSong: Song? = null
+
+    // System delete-confirmation dialog (Android 10+ scoped storage).
+    private val deleteRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val song = pendingDeleteSong
+        pendingDeleteSong = null
+        if (result.resultCode == RESULT_OK && song != null) onSongDeleted(song)
+    }
+
+    // WRITE_EXTERNAL_STORAGE consent for deletes on Android 9 and below.
+    private val deleteWritePermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val song = pendingDeleteSong
+        pendingDeleteSong = null
+        if (granted && song != null) legacyDelete(song)
+        else if (!granted) Toast.makeText(this, "Permission needed to delete files", Toast.LENGTH_LONG).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -148,6 +174,10 @@ class MainActivity : AppCompatActivity() {
                     showFragment(FavouritesFragment())
                     true
                 }
+                R.id.nav_settings -> {
+                    showFragment(SettingsFragment())
+                    true
+                }
                 else -> false
             }
         }
@@ -221,6 +251,72 @@ class MainActivity : AppCompatActivity() {
         playSong(song, songs)
     }
 
+    // ── Delete a song from the device (protected) ────────────────────────────
+
+    /**
+     * Deletes a song's file from the device. On Android 10+ this routes through
+     * MediaStore.createDeleteRequest, so the SYSTEM shows its own confirmation
+     * dialog — the protected delete. On Android 9 and below it needs
+     * WRITE_EXTERNAL_STORAGE and deletes directly; on Android 10 it catches the
+     * RecoverableSecurityException and launches the system consent dialog.
+     */
+    fun deleteSong(song: Song) {
+        pendingDeleteSong = song
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val pendingIntent = MediaStore.createDeleteRequest(contentResolver, listOf(song.uri))
+            deleteRequestLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
+        } else {
+            legacyDelete(song)
+        }
+    }
+
+    private fun legacyDelete(song: Song) {
+        // Android 9 and below need explicit write permission first.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingDeleteSong = song
+            deleteWritePermLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
+        try {
+            val rows = contentResolver.delete(song.uri, null, null)
+            pendingDeleteSong = null
+            if (rows > 0) onSongDeleted(song)
+            else Toast.makeText(this, "Couldn't delete the file", Toast.LENGTH_LONG).show()
+        } catch (e: SecurityException) {
+            // Android 10 hands back a user-consent dialog to launch.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && launchRecoverableDelete(e, song)) return
+            pendingDeleteSong = null
+            Toast.makeText(this, "Couldn't delete: permission denied", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun launchRecoverableDelete(e: SecurityException, song: Song): Boolean {
+        val recoverable = e as? RecoverableSecurityException ?: return false
+        pendingDeleteSong = song
+        val sender = recoverable.userAction.actionIntent.intentSender
+        deleteRequestLauncher.launch(IntentSenderRequest.Builder(sender).build())
+        return true
+    }
+
+    private fun onSongDeleted(song: Song) {
+        // Drop it from the live playback queue (the file is gone now).
+        mediaController?.let { mc ->
+            for (i in 0 until mc.mediaItemCount) {
+                if (mc.getMediaItemAt(i).mediaId == song.id.toString()) {
+                    mc.removeMediaItem(i)   // ExoPlayer advances if this was the current item
+                    break
+                }
+            }
+        }
+        currentQueue = currentQueue.filterNot { it.id == song.id }
+        viewModel.removeSong(song.id)
+        Toast.makeText(this, "Deleted \"${song.title}\"", Toast.LENGTH_SHORT).show()
+    }
+
     // ── In-app auto-update (checks GitHub Releases) ──────────────────────────
 
     /** Once per launch, ask GitHub if a newer release exists and prompt the user. */
@@ -230,6 +326,16 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val info = UpdateManager.checkForUpdate() ?: return@launch
             showUpdateDialog(info)
+        }
+    }
+
+    /** Manual "Check for updates" from Settings — reports when already up to date. */
+    fun checkForUpdateManual() {
+        Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val info = UpdateManager.checkForUpdate()
+            if (info != null) showUpdateDialog(info)
+            else Toast.makeText(this@MainActivity, "You're on the latest version", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -309,6 +415,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun maybeAutoPlay() {
         if (hasAutoPlayed) return
+        if (!SettingsManager.isAutoplayOnLaunch(this)) return  // user disabled it in Settings
         val controller = mediaController ?: return            // not connected yet
         if (controller.currentMediaItem != null) {
             hasAutoPlayed = true                              // already playing — don't interrupt

@@ -42,6 +42,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _currentSong.value = song
     }
 
+    /** Drops a song from the library after it's been deleted from the device. */
+    fun removeSong(id: Long) {
+        _songs.value = _songs.value?.filterNot { it.id == id }
+    }
+
     fun setTab(tab: Int) {
         _currentTab.value = tab
     }
