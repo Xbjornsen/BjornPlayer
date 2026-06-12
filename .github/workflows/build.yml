@@ -60,9 +60,7 @@ jobs:
             1. Download `BjornPlayer-${{ github.ref_name }}.apk` below
             2. Transfer it to your Android phone
             3. Open the file on your phone (you may need to allow *Install unknown apps* in Settings)
-
-            ### What's new
-            <!-- Add release notes here -->
+          generate_release_notes: true   # auto-append a changelog from merged PRs/commits
           files: BjornPlayer-${{ github.ref_name }}.apk
           draft: false
           prerelease: false
