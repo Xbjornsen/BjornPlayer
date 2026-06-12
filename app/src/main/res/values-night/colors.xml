@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================================
+         Semantic tokens (DARK / night). Same names as values/colors.xml.
+         Warm near-black surfaces to pair with the orange accent.
+         ============================================================ -->
+    <color name="bg_primary">#141210</color>        <!-- page background -->
+    <color name="surface">#1E1B18</color>           <!-- cards, sheets, nav -->
+    <color name="surface_variant">#2A2420</color>   <!-- search field, chips, mini-bar art -->
+    <color name="text_primary">#F4F0EA</color>
+    <color name="text_secondary">#9E948A</color>
+    <color name="divider">#2E2823</color>
+
+    <!-- The brighter orange reads best against dark surfaces. -->
+    <color name="accent">#FF7A45</color>
+    <color name="on_accent">#20150E</color>         <!-- dark icon/text on the bright orange fill -->
+    <color name="accent_muted">#33FF7A45</color>    <!-- low-alpha accent for icon circles / current row -->
+</resources>

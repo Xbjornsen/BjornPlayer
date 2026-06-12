@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Rounded accent-tinted background for the song row that's currently playing. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
+    android:shape="rectangle">
     <solid android:color="@color/accent_muted" />
+    <corners android:radius="12dp" />
 </shape>
