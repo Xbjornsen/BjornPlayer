@@ -13,6 +13,12 @@
     <!-- Wake lock to keep playing with screen off -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Internet is used ONLY to check GitHub Releases for app updates and download
+         the new APK. No music data ever leaves the device. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Install the downloaded update APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -40,6 +46,17 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- Shares the downloaded update APK with the system package installer -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

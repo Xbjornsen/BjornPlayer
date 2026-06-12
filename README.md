@@ -20,7 +20,9 @@ A clean, ad-free local music player for Android. No accounts. No internet. No no
 - 🔇 Auto-pauses on headphone unplug
 - 📋 Queue management
 - ⚙️ Built-in equalizer view
-- 🔒 Zero internet permission — your music stays on your device
+- 🌗 Follows your system light/dark theme
+- 🔄 In-app updates straight from GitHub Releases — no app store needed
+- 🔒 Your music never leaves the device (network is used only to check for updates)
 
 ---
 
@@ -77,8 +79,11 @@ A clean, ad-free local music player for Android. No accounts. No internet. No no
 | `READ_EXTERNAL_STORAGE` (Android 12 and below) | Scan music files |
 | `FOREGROUND_SERVICE` | Keep playing with screen off |
 | `WAKE_LOCK` | Prevent audio cutting out during playback |
+| `INTERNET` | Check GitHub Releases for app updates and download the new APK |
+| `REQUEST_INSTALL_PACKAGES` | Install a downloaded update |
 
-**No `INTERNET` permission.** No data ever leaves your device.
+**Network is used only for the update check** — no accounts, no analytics, and your
+music never leaves the device.
 
 ---
 

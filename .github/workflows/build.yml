@@ -4,14 +4,14 @@ on:
   push:
     branches: [ master ]
     tags:
-      - 'v*'           # trigger a Release on any tag like v1.0, v1.2.3
+      - 'v*'           # a version tag (e.g. v1.2) builds, signs and publishes a Release
   pull_request:
     branches: [ master ]
   workflow_dispatch:   # lets you trigger a build manually from the Actions tab
 
 jobs:
   build:
-    name: Build debug APK
+    name: Build release APK
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required to create releases and upload assets
@@ -30,23 +30,40 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      # ── Decode the signing keystore from the secret, if available ────────────
+      # On pushes/PRs without secrets (e.g. forks) this is skipped and the build
+      # produces an unsigned release APK — enough to catch compile breakage.
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Keystore decoded — release build will be signed."
+          else
+            echo "No keystore secret present — building unsigned release APK."
+          fi
+
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
 
       # ── Upload APK as a workflow artifact (available on every build) ─────────
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BjornPlayer-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: BjornPlayer-release
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
-      # ── On a version tag, create a GitHub Release and attach the APK ─────────
+      # ── On a version tag, rename the signed APK and publish a Release ────────
       - name: Rename APK for release
         if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          cp app/build/outputs/apk/debug/app-debug.apk BjornPlayer-${VERSION}.apk
+        run: cp app/build/outputs/apk/release/app-release.apk "BjornPlayer-${GITHUB_REF_NAME}.apk"
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')

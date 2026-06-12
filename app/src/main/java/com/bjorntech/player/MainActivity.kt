@@ -12,13 +12,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.bjorntech.player.databinding.ActivityMainBinding
 import com.bumptech.glide.Glide
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,6 +35,10 @@ class MainActivity : AppCompatActivity() {
 
     /** True once we've kicked off the initial auto-play for this Activity instance. */
     private var hasAutoPlayed = false
+
+    /** Update-check runs once per Activity instance; APK awaiting install permission. */
+    private var hasCheckedForUpdate = false
+    private var pendingApk: File? = null
 
     fun mediaController(): MediaController? = mediaController
 
@@ -64,6 +72,13 @@ class MainActivity : AppCompatActivity() {
         setupNowPlayingBar()
         observeViewModel()
         checkPermissionsAndLoad()
+        maybeCheckForUpdate()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // If we sent the user to grant "install unknown apps", finish the install on return.
+        if (pendingApk != null) installPendingApk()
     }
 
     override fun onStart() {
@@ -204,6 +219,52 @@ class MainActivity : AppCompatActivity() {
         val song = viewModel.currentSong.value ?: return
         val songs = viewModel.songs.value?.takeIf { it.isNotEmpty() } ?: return
         playSong(song, songs)
+    }
+
+    // ── In-app auto-update (checks GitHub Releases) ──────────────────────────
+
+    /** Once per launch, ask GitHub if a newer release exists and prompt the user. */
+    private fun maybeCheckForUpdate() {
+        if (hasCheckedForUpdate) return
+        hasCheckedForUpdate = true
+        lifecycleScope.launch {
+            val info = UpdateManager.checkForUpdate() ?: return@launch
+            showUpdateDialog(info)
+        }
+    }
+
+    private fun showUpdateDialog(info: UpdateManager.UpdateInfo) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Update available")
+            .setMessage("BjornPlayer ${info.versionName} is available. Download and install it now?")
+            .setPositiveButton("Update") { _, _ -> downloadAndInstall(info) }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
+    private fun downloadAndInstall(info: UpdateManager.UpdateInfo) {
+        Toast.makeText(this, "Downloading update…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val apk = UpdateManager.downloadApk(this@MainActivity, info)
+            if (apk == null) {
+                Toast.makeText(this@MainActivity, "Update download failed", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            pendingApk = apk
+            installPendingApk()
+        }
+    }
+
+    private fun installPendingApk() {
+        val apk = pendingApk ?: return
+        if (UpdateManager.canInstall(this)) {
+            pendingApk = null
+            UpdateManager.installApk(this, apk)
+        } else {
+            // Needs one-time consent; onResume retries the install once granted.
+            Toast.makeText(this, "Allow BjornPlayer to install apps, then come back", Toast.LENGTH_LONG).show()
+            UpdateManager.requestInstallPermission(this)
+        }
     }
 
     /** Reflect the controller's real playing state on the mini-bar button. */
