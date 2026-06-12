@@ -69,14 +69,20 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         val sessionToken = SessionToken(this, ComponentName(this, PlaybackService::class.java))
-        controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        controllerFuture?.addListener({
-            mediaController = controllerFuture?.get()
-            mediaController?.addListener(playerListener)
-            val isPlaying = mediaController?.isPlaying ?: false
-            binding.btnPlayPause.setImageResource(
-                if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
-            )
+        val future = MediaController.Builder(this, sessionToken).buildAsync()
+        controllerFuture = future
+        future.addListener({
+            // get() can throw if the connection failed; never wire the UI up to a
+            // half-connected controller.
+            val controller = try {
+                future.get()
+            } catch (e: Exception) {
+                null
+            } ?: return@addListener
+
+            mediaController = controller
+            controller.addListener(playerListener)
+            syncPlayPauseIcon()
             progressHandler.post(progressRunnable)
             maybeAutoPlay()   // songs may already be loaded — try to start
         }, ContextCompat.getMainExecutor(this))
@@ -146,15 +152,65 @@ class MainActivity : AppCompatActivity() {
             NowPlayingFragment.newInstance().show(supportFragmentManager, "now_playing")
         }
 
-        binding.btnPlayPause.setOnClickListener {
-            mediaController?.let { mc ->
-                if (mc.isPlaying) mc.pause() else mc.play()
+        binding.btnPlayPause.setOnClickListener { togglePlayPause() }
+        binding.btnNext.setOnClickListener { playNext() }
+    }
+
+    /**
+     * Play/pause that self-heals. The MediaSession can come back with an empty
+     * queue if the service was reclaimed while the app was backgrounded; in that
+     * case a bare play() no-ops, so we rebuild the queue from the song the UI is
+     * showing. Also handles the ended/idle states where play() alone does nothing.
+     * Public so both the mini-bar and the Now Playing sheet share one code path.
+     */
+    fun togglePlayPause() {
+        val mc = mediaController ?: return
+        when {
+            mc.isPlaying -> mc.pause()
+            mc.mediaItemCount == 0 -> restartFromCurrentSong()
+            else -> {
+                when (mc.playbackState) {
+                    Player.STATE_ENDED -> mc.seekTo(0, 0)
+                    Player.STATE_IDLE -> mc.prepare()
+                }
+                mc.play()
             }
         }
+    }
 
-        binding.btnNext.setOnClickListener {
-            mediaController?.seekToNextMediaItem()
+    /** Skip to next, rebuilding the queue if the session lost it, and wrapping at the end. */
+    fun playNext() {
+        val mc = mediaController ?: return
+        when {
+            mc.mediaItemCount == 0 -> restartFromCurrentSong()
+            mc.hasNextMediaItem() -> mc.seekToNextMediaItem()
+            else -> { mc.seekTo(0, 0); mc.play() }   // wrap around at the end
         }
+    }
+
+    /** Skip to previous, rebuilding the queue if the session lost it. */
+    fun playPrevious() {
+        val mc = mediaController ?: return
+        if (mc.mediaItemCount == 0) restartFromCurrentSong() else mc.seekToPreviousMediaItem()
+    }
+
+    /**
+     * Rebuilds the playback queue from the song shown in the UI. Self-heals the
+     * transport controls when the MediaSession comes back with an empty queue
+     * (e.g. the service was reclaimed while the app was backgrounded), so the user
+     * doesn't have to re-pick a song from the list.
+     */
+    private fun restartFromCurrentSong() {
+        val song = viewModel.currentSong.value ?: return
+        val songs = viewModel.songs.value?.takeIf { it.isNotEmpty() } ?: return
+        playSong(song, songs)
+    }
+
+    /** Reflect the controller's real playing state on the mini-bar button. */
+    private fun syncPlayPauseIcon() {
+        binding.btnPlayPause.setImageResource(
+            if (mediaController?.isPlaying == true) R.drawable.ic_pause else R.drawable.ic_play
+        )
     }
 
     private fun observeViewModel() {
@@ -207,6 +263,11 @@ class MainActivity : AppCompatActivity() {
             binding.btnPlayPause.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            // Ended/idle leaves isPlaying false — keep the button showing "play".
+            syncPlayPauseIcon()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {

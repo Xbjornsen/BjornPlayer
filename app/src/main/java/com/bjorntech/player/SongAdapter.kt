@@ -1,5 +1,7 @@
 package com.bjorntech.player
 
+import android.content.Context
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -55,11 +57,13 @@ class SongAdapter(
             holder.duration.visibility = View.GONE
             holder.equalizer.visibility = View.VISIBLE
             holder.equalizer.isAnimating = true
+            holder.itemView.setBackgroundResource(R.drawable.bg_row_current)
         } else {
             holder.duration.text = song.durationFormatted
             holder.duration.visibility = View.VISIBLE
             holder.equalizer.visibility = View.GONE
             holder.equalizer.isAnimating = false
+            holder.itemView.setBackgroundResource(selectableItemBackground(holder.itemView.context))
         }
 
         Glide.with(holder.itemView.context)
@@ -76,6 +80,13 @@ class SongAdapter(
     override fun onViewRecycled(holder: SongViewHolder) {
         super.onViewRecycled(holder)
         holder.equalizer.isAnimating = false
+    }
+
+    /** Resolve the theme's ripple background so non-current rows keep their touch feedback. */
+    private fun selectableItemBackground(context: Context): Int {
+        val v = TypedValue()
+        context.theme.resolveAttribute(android.R.attr.selectableItemBackground, v, true)
+        return v.resourceId
     }
 }
 

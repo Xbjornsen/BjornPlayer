@@ -34,7 +34,15 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     private val binding get() = _binding!!
     private val viewModel: PlayerViewModel by activityViewModels()
     private val handler = Handler(Looper.getMainLooper())
-    private var controller: androidx.media3.session.MediaController? = null
+
+    /**
+     * Always resolve the controller live from the Activity. The Activity releases
+     * and rebuilds its MediaController across onStop/onStart, so caching it here
+     * would leave the sheet driving a released controller after the app returns
+     * from the background.
+     */
+    private val controller: androidx.media3.session.MediaController?
+        get() = (activity as? MainActivity)?.mediaController()
     private var isSeeking = false
     private var isAnimating = false
 
@@ -76,6 +84,34 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // (Re)attach to the current controller — it may have been rebuilt by the
+        // Activity while we were backgrounded — and sync all transport icons.
+        controller?.addListener(playerListener)
+        syncTransportUi()
+    }
+
+    override fun onPause() {
+        controller?.removeListener(playerListener)
+        super.onPause()
+    }
+
+    /** Pull play/pause, shuffle, repeat and speed state from the live controller. */
+    private fun syncTransportUi() {
+        val mc = controller ?: return
+        _binding?.npBtnPlayPause?.setImageResource(
+            if (mc.isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        )
+        updateShuffleIcon(mc.shuffleModeEnabled)
+        updateRepeatIcon(mc.repeatMode)
+        val currentSpeed = mc.playbackParameters.speed
+        speedIndex = speeds.indexOfFirst { s -> s == currentSpeed }.takeIf { i -> i >= 0 } ?: 1
+        _binding?.npBtnSpeed?.text = speedLabels[speedIndex]
+        val speedColor = if (speedIndex == 1) R.color.text_secondary else R.color.accent
+        _binding?.npBtnSpeed?.setTextColor(resources.getColor(speedColor, context?.theme))
+    }
+
     override fun onStart() {
         super.onStart()
         val sheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -94,22 +130,6 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        controller = (activity as? MainActivity)?.mediaController()
-        controller?.addListener(playerListener)
-
-        controller?.let {
-            binding.npBtnPlayPause.setImageResource(
-                if (it.isPlaying) R.drawable.ic_pause else R.drawable.ic_play
-            )
-            updateShuffleIcon(it.shuffleModeEnabled)
-            updateRepeatIcon(it.repeatMode)
-            val currentSpeed = it.playbackParameters.speed
-            speedIndex = speeds.indexOfFirst { s -> s == currentSpeed }.takeIf { i -> i >= 0 } ?: 1
-            binding.npBtnSpeed.text = speedLabels[speedIndex]
-            val speedColor = if (speedIndex == 1) R.color.text_secondary else R.color.accent
-            binding.npBtnSpeed.setTextColor(resources.getColor(speedColor, context?.theme))
-        }
-
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             if (song != null) {
                 binding.npTitle.text = song.title
@@ -121,11 +141,11 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
             }
         }
 
-        binding.npBtnPlayPause.setOnClickListener {
-            controller?.let { if (it.isPlaying) it.pause() else it.play() }
-        }
-        binding.npBtnPrev.setOnClickListener { controller?.seekToPreviousMediaItem() }
-        binding.npBtnNext.setOnClickListener { controller?.seekToNextMediaItem() }
+        // Route transport through the Activity so the sheet and the mini-bar share
+        // the same self-healing play/next/prev logic.
+        binding.npBtnPlayPause.setOnClickListener { (activity as? MainActivity)?.togglePlayPause() }
+        binding.npBtnPrev.setOnClickListener { (activity as? MainActivity)?.playPrevious() }
+        binding.npBtnNext.setOnClickListener { (activity as? MainActivity)?.playNext() }
 
         binding.npBtnShuffle.setOnClickListener {
             controller?.let {
@@ -404,9 +424,7 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     }
 
     override fun onDestroyView() {
-        handler.removeCallbacksAndMessages(null)
-        controller?.removeListener(playerListener)
-        controller = null
+        handler.removeCallbacksAndMessages(null)   // listener detached in onPause
         super.onDestroyView()
         _binding = null
     }

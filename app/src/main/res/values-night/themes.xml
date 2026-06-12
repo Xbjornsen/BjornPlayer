@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark: light icons in the status/navigation bars. Everything else is
+         inherited from Base.Theme.BjornPlayer (colours adapt via tokens). -->
+    <style name="Theme.BjornPlayer" parent="Base.Theme.BjornPlayer">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>
