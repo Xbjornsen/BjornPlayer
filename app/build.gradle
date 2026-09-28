@@ -18,7 +18,7 @@ def hasReleaseSigning = signingStoreFile != null
 
 android {
     namespace 'com.bjorntech.player'
-    compileSdk 34
+    compileSdk 36   // Media3 1.11 needs 36; targetSdk stays 34 (35+ forces edge-to-edge)
 
     defaultConfig {
         applicationId "com.bjorntech.player"
@@ -52,17 +52,20 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = '1.8'
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     buildFeatures {
         viewBinding true
         buildConfig true   // exposes BuildConfig.VERSION_NAME to the in-app updater
+    }
+}
+
+// kotlinOptions {} is an error in Kotlin 2.2+; set the JVM target here to match Java.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -78,9 +81,9 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'   // lifecycleScope for the update check
 
     // Media3 ExoPlayer (Google's modern media library)
-    implementation 'androidx.media3:media3-exoplayer:1.2.1'
-    implementation 'androidx.media3:media3-session:1.2.1'
-    implementation 'androidx.media3:media3-ui:1.2.1'
+    implementation 'androidx.media3:media3-exoplayer:1.11.1'
+    implementation 'androidx.media3:media3-session:1.11.1'
+    implementation 'androidx.media3:media3-ui:1.11.1'
 
     // Glide for album art
     implementation 'com.github.bumptech.glide:glide:4.16.0'
