@@ -37,6 +37,10 @@ class SongsFragment : Fragment() {
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
 
+        // The query lives in the (activity-scoped) ViewModel and outlives this view.
+        // Put it back in the box so the list is never filtered by invisible text.
+        binding.searchView.setQuery(viewModel.searchQuery.value ?: "", false)
+
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?) = false
             override fun onQueryTextChange(newText: String?): Boolean {
