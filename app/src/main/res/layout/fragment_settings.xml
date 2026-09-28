@@ -40,12 +40,27 @@
         <LinearLayout android:id="@+id/settings_autoplay" style="@style/SettingsRow">
             <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_shuffle" />
             <LinearLayout style="@style/SettingsRowText">
-                <TextView style="@style/SettingsRowTitle" android:text="Shuffle &amp; play on launch" />
+                <TextView style="@style/SettingsRowTitle" android:text="Play on launch" />
                 <TextView style="@style/SettingsRowSubtitle"
-                    android:text="Start a random song when the app opens" />
+                    android:text="Start playing when the app opens" />
             </LinearLayout>
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/settings_autoplay_switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="false"
+                android:focusable="false" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/settings_resume" style="@style/SettingsRow">
+            <ImageView style="@style/SettingsRowIcon" android:src="@drawable/ic_queue" />
+            <LinearLayout style="@style/SettingsRowText">
+                <TextView style="@style/SettingsRowTitle" android:text="Resume where I left off" />
+                <TextView style="@style/SettingsRowSubtitle"
+                    android:text="Restore the last queue and position. Off: start a random song" />
+            </LinearLayout>
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/settings_resume_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:clickable="false"

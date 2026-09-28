@@ -10,6 +10,7 @@ object SettingsManager {
     private const val PREFS = "settings"
     private const val KEY_THEME = "theme_mode"            // an AppCompatDelegate.MODE_NIGHT_* value
     private const val KEY_AUTOPLAY = "autoplay_on_launch"
+    private const val KEY_RESUME = "resume_last_session"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -43,4 +44,11 @@ object SettingsManager {
 
     fun setAutoplayOnLaunch(context: Context, enabled: Boolean) =
         prefs(context).edit { putBoolean(KEY_AUTOPLAY, enabled) }
+
+    /** Restore the last queue/track/position on launch instead of a random song. */
+    fun isResumeLastSession(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_RESUME, true)
+
+    fun setResumeLastSession(context: Context, enabled: Boolean) =
+        prefs(context).edit { putBoolean(KEY_RESUME, enabled) }
 }

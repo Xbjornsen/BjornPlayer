@@ -11,6 +11,7 @@ import androidx.media3.session.MediaSessionService
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var detachStateStore: (() -> Unit)? = null
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -30,6 +31,7 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, player).build()
         SleepTimer.attach(player)
+        detachStateStore = PlaybackStateStore.attach(this, player)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -37,6 +39,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        detachStateStore?.invoke()   // final save of position before the player goes away
+        detachStateStore = null
         mediaSession?.run {
             SleepTimer.detach(player)
             player.release()

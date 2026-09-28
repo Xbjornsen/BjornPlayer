@@ -54,6 +54,26 @@ class QueueShuffleOrderTest {
     }
 
     @Test
+    fun savedOrderIsReusedOnRestore() {
+        val saved = intArrayOf(3, 0, 4, 1, 2)
+        QueueShuffleOrder.pendingRestoreOrder = saved
+        val o = fresh(5, start = 1)
+        assertEquals(saved.toList(), o.playOrder())
+        assertEquals(null, QueueShuffleOrder.pendingRestoreOrder)   // consumed
+    }
+
+    @Test
+    fun invalidSavedOrderFallsBackToFreshShuffle() {
+        QueueShuffleOrder.pendingRestoreOrder = intArrayOf(0, 0, 1)   // not a permutation
+        val o = fresh(3, start = 2)
+        o.assertConsistent()
+        assertEquals(2, o.firstIndex)
+        QueueShuffleOrder.pendingRestoreOrder = intArrayOf(1, 0)      // wrong length
+        fresh(3).assertConsistent()
+        assertEquals(null, QueueShuffleOrder.pendingRestoreOrder)
+    }
+
+    @Test
     fun outOfRangeStartIndexIsIgnored() {
         fresh(5, start = 9).assertConsistent()
         fresh(0, start = 0).assertConsistent()

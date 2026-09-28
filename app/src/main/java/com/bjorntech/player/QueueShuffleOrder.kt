@@ -26,6 +26,14 @@ class QueueShuffleOrder private constructor(
 ) : ShuffleOrder {
 
     companion object {
+        /**
+         * A saved play order to reuse for the next fresh playlist of the same length
+         * (restoring "where you were"). Set by MainActivity right before setMediaItems;
+         * consumed by [cloneAndSet]. In-process only (service runs in the app process).
+         */
+        @Volatile
+        var pendingRestoreOrder: IntArray? = null
+
         private fun freshShuffle(length: Int, random: Random, start: Int = C.INDEX_UNSET): IntArray {
             val a = IntArray(length) { it }
             for (i in length - 1 downTo 1) {
@@ -96,8 +104,14 @@ class QueueShuffleOrder private constructor(
     override fun cloneAndClear(): ShuffleOrder = QueueShuffleOrder(IntArray(0), random)
 
     /** New playlist (setMediaItems): fresh shuffle with the tapped item first. */
-    override fun cloneAndSet(insertionCount: Int, startIndex: Int): ShuffleOrder =
-        QueueShuffleOrder(freshShuffle(insertionCount, random, startIndex), random)
+    override fun cloneAndSet(insertionCount: Int, startIndex: Int): ShuffleOrder {
+        val restore = pendingRestoreOrder
+        pendingRestoreOrder = null
+        if (restore != null && PlaybackStateStore.isPermutation(restore, insertionCount)) {
+            return QueueShuffleOrder(restore.copyOf(), random)
+        }
+        return QueueShuffleOrder(freshShuffle(insertionCount, random, startIndex), random)
+    }
 
     /**
      * Timeline items [indexFrom, indexToExclusive) moved to start at [newIndexFrom].

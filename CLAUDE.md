@@ -66,6 +66,12 @@ Key files (`app/src/main/java/com/bjorntech/player/`):
   `PlaybackService`). Lives outside the UI so it survives the sheet closing and the
   Activity's controller being released on screen-off.
 - **SongInfo.kt** — shared "Song Info" dialog; file reads on `Dispatchers.IO`.
+- **PlaybackStateStore.kt** — "resume where you left off". Saving is attached to the
+  service's player (queue ids, shuffle play order, current id, position, modes → prefs);
+  restoring happens in `MainActivity.restoreLastSession()` on cold start, because only the
+  UI has the scanned library. The exact shuffle order is handed to the player through
+  `QueueShuffleOrder.pendingRestoreOrder` (consumed by `cloneAndSet`). Setting:
+  "Resume where I left off" (default on); off = old random-song start.
 - **UpdateManager.kt** — checks GitHub Releases and installs a newer signed APK.
 
 ### Things that bite you here (important invariants)
@@ -87,8 +93,8 @@ Key files (`app/src/main/java/com/bjorntech/player/`):
   to the library) and re-sync with `syncCurrentSongFromController()` on reconnect.
 - `pendingQueued` (MainActivity) tracks user-queued mediaIds that haven't started; it's
   consumed in `onMediaItemTransition`.
-- The service runs in the app's main process, which is why `SleepTimer` can be a plain
-  singleton.
+- The service runs in the app's main process, which is why `SleepTimer` and
+  `QueueShuffleOrder.pendingRestoreOrder` can be plain singletons.
 
 ## Conventions
 

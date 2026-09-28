@@ -487,7 +487,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun maybeAutoPlay() {
         if (hasAutoPlayed) return
-        if (!SettingsManager.isAutoplayOnLaunch(this)) return  // user disabled it in Settings
         val controller = mediaController ?: return            // not connected yet
         if (controller.currentMediaItem != null) {
             hasAutoPlayed = true                              // already playing — don't interrupt
@@ -495,7 +494,40 @@ class MainActivity : AppCompatActivity() {
         }
         val songs = viewModel.songs.value?.takeIf { it.isNotEmpty() } ?: return  // not loaded yet
         hasAutoPlayed = true
-        playSong(songs.random(), songs)
+        val autoplay = SettingsManager.isAutoplayOnLaunch(this)
+
+        // Cold start: pick up where we left off (paused unless autoplay is on).
+        if (SettingsManager.isResumeLastSession(this) && restoreLastSession(controller, songs, autoplay)) return
+
+        if (autoplay) playSong(songs.random(), songs)
+    }
+
+    /**
+     * Rebuild the saved queue from the scanned library. Songs deleted since are
+     * dropped; if the queue is unchanged its exact shuffle order is reused.
+     * Returns false if there's nothing usable to restore.
+     */
+    private fun restoreLastSession(controller: MediaController, library: List<Song>, play: Boolean): Boolean {
+        val saved = PlaybackStateStore.load(this) ?: return false
+        val byId = library.associateBy { it.id.toString() }
+        val queue = saved.ids.mapNotNull { byId[it] }
+        if (queue.isEmpty()) return false
+
+        val currentIndex = saved.currentId?.let { id -> queue.indexOfFirst { it.id.toString() == id } } ?: -1
+        val startIndex = currentIndex.coerceAtLeast(0)
+        val startPosition = if (currentIndex >= 0) saved.positionMs else 0L
+
+        currentQueue = queue
+        pendingQueued.clear()
+        // Only valid if no songs went missing (indices would shift otherwise).
+        QueueShuffleOrder.pendingRestoreOrder = saved.shuffleOrder?.takeIf { queue.size == saved.ids.size }
+        controller.setMediaItems(queue.map { buildMediaItem(it) }, startIndex, startPosition)
+        controller.shuffleModeEnabled = saved.shuffle
+        controller.repeatMode = saved.repeatMode
+        controller.prepare()
+        if (play) controller.play()
+        viewModel.setCurrentSong(queue[startIndex])
+        return true
     }
 
     private val playerListener = object : Player.Listener {

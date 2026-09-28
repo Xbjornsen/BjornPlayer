@@ -41,6 +41,12 @@ class SettingsFragment : Fragment() {
             binding.settingsAutoplaySwitch.isChecked = newValue
             SettingsManager.setAutoplayOnLaunch(ctx, newValue)
         }
+        binding.settingsResumeSwitch.isChecked = SettingsManager.isResumeLastSession(ctx)
+        binding.settingsResume.setOnClickListener {
+            val newValue = !binding.settingsResumeSwitch.isChecked
+            binding.settingsResumeSwitch.isChecked = newValue
+            SettingsManager.setResumeLastSession(ctx, newValue)
+        }
 
         // Library
         binding.settingsRescan.setOnClickListener {
