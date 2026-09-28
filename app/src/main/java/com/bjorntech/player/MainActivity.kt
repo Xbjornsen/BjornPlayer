@@ -213,6 +213,10 @@ class MainActivity : AppCompatActivity() {
                 else -> false
             }
         }
+        // Tapping the current tab again returns from a drill-down to its list.
+        binding.bottomNav.setOnItemReselectedListener {
+            supportFragmentManager.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
+        }
         // Load the default tab only on a fresh start. On recreation (rotation, theme
         // change) the FragmentManager and BottomNavigationView restore themselves;
         // replacing here showed Songs while the nav still highlighted the old tab.
@@ -220,6 +224,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showFragment(fragment: androidx.fragment.app.Fragment) {
+        // Switching tabs drops any artist/album drill-down, so Back doesn't pop an
+        // old drill-down over a different tab.
+        supportFragmentManager.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
             .commit()
@@ -534,7 +541,11 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "${song.title} added to queue", Toast.LENGTH_SHORT).show()
     }
 
-    fun playSong(song: Song, queue: List<Song>) {
+    /**
+     * Replace the queue and start [song]. [shuffle] true for the library/favourites
+     * (and auto-play); false for artist/album drill-downs, which play in order.
+     */
+    fun playSong(song: Song, queue: List<Song>, shuffle: Boolean = true) {
         currentQueue = queue
         val controller = mediaController ?: return
 
@@ -544,7 +555,7 @@ class MainActivity : AppCompatActivity() {
         pendingQueued.clear()
         QueueShuffleOrder.pendingStartIndex = startIndex   // tapped song plays first in shuffle order
         controller.setMediaItems(mediaItems, startIndex, 0)
-        controller.shuffleModeEnabled = true
+        controller.shuffleModeEnabled = shuffle
         controller.prepare()
         controller.play()
         viewModel.setCurrentSong(song)

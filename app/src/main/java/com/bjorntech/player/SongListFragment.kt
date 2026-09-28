@@ -40,10 +40,13 @@ class SongListFragment : Fragment() {
         val title = arguments?.getString(ARG_TITLE) ?: ""
         val ids = arguments?.getLongArray(ARG_IDS)?.toSet() ?: emptySet()
 
-        binding.searchView.visibility = View.GONE
+        binding.searchRow.visibility = View.GONE   // no search/sort in a drill-down
+        binding.listHeader.visibility = View.VISIBLE
+        binding.listTitle.text = title
 
         val adapter = SongAdapter(
-            onSongClick = { song, queue -> (activity as? MainActivity)?.playSong(song, queue) },
+            // An artist/album plays in album order, not shuffled like the full library.
+            onSongClick = { song, queue -> (activity as? MainActivity)?.playSong(song, queue, shuffle = false) },
             onLongClick = { song ->
                 SongOptionsFragment.newInstance(song.id)
                     .show(parentFragmentManager, "song_options")
@@ -54,8 +57,15 @@ class SongListFragment : Fragment() {
         binding.recyclerView.adapter = adapter
 
         viewModel.songs.observe(viewLifecycleOwner) { allSongs ->
-            val filtered = allSongs.filter { it.id in ids }
-            adapter.submitFullList(filtered)
+            val songs = MusicScanner.inAlbumOrder(allSongs.filter { it.id in ids })
+            adapter.submitFullList(songs)
+            val totalMin = songs.sumOf { it.duration } / 60_000
+            binding.listSubtitle.text =
+                (if (songs.size == 1) "1 song" else "${songs.size} songs") + " · $totalMin min"
+        }
+
+        viewModel.currentSong.observe(viewLifecycleOwner) { song ->
+            adapter.setCurrentSong(song?.id ?: -1L)
         }
     }
 
