@@ -44,17 +44,15 @@ class FavouritesFragment : Fragment() {
         }
 
         viewModel.songs.observe(viewLifecycleOwner) { refreshList() }
+        // Favouriting from the Now Playing / options sheets doesn't pause this
+        // fragment, so onResume never fired — listen for changes directly.
+        FavouritesManager.changes.observe(viewLifecycleOwner) { refreshList() }
 
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             adapter.setCurrentSong(song?.id ?: -1L)
         }
 
         viewModel.isPlaying.observe(viewLifecycleOwner) { adapter.setPlaying(it) }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        refreshList()
     }
 
     private fun refreshList() {

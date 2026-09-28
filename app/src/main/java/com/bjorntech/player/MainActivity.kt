@@ -457,8 +457,13 @@ class MainActivity : AppCompatActivity() {
                     .into(binding.nowPlayingArt)
                 if (binding.nowPlayingBar.visibility != android.view.View.VISIBLE) {
                     binding.nowPlayingBar.visibility = android.view.View.VISIBLE
-                    val pad = (170 * resources.displayMetrics.density).toInt()
-                    binding.fragmentContainer.setPadding(0, 0, 0, pad)
+                    // Pad the content so the last row clears the mini-bar, measured
+                    // from the real layout rather than a hard-coded 170dp.
+                    binding.nowPlayingBar.post {
+                        val gap = (8 * resources.displayMetrics.density).toInt()
+                        val pad = binding.root.height - binding.nowPlayingBar.top + gap
+                        if (pad > 0) binding.fragmentContainer.setPadding(0, 0, 0, pad)
+                    }
                 }
             }
         }
