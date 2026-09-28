@@ -99,7 +99,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupBottomNav()
+        setupBottomNav(restoring = savedInstanceState != null)
         setupNowPlayingBar()
         observeViewModel()
         checkPermissionsAndLoad()
@@ -161,7 +161,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupBottomNav() {
+    private fun setupBottomNav(restoring: Boolean) {
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_songs -> {
@@ -187,8 +187,10 @@ class MainActivity : AppCompatActivity() {
                 else -> false
             }
         }
-        // Load default fragment
-        showFragment(SongsFragment())
+        // Load the default tab only on a fresh start. On recreation (rotation, theme
+        // change) the FragmentManager and BottomNavigationView restore themselves;
+        // replacing here showed Songs while the nav still highlighted the old tab.
+        if (!restoring) showFragment(SongsFragment())
     }
 
     private fun showFragment(fragment: androidx.fragment.app.Fragment) {
