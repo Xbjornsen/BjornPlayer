@@ -64,6 +64,7 @@ class SongsFragment : Fragment() {
         viewModel.isLoading.observe(viewLifecycleOwner) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
             binding.recyclerView.visibility = if (loading) View.GONE else View.VISIBLE
+            updateEmptyState()   // songs are posted before isLoading flips to false
         }
 
         viewModel.permissionDenied.observe(viewLifecycleOwner) { updateEmptyState() }
