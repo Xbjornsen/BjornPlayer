@@ -5,7 +5,6 @@ import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Drawable
-import android.media.MediaMetadataRetriever
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -202,7 +201,7 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
 
         binding.npBtnInfo.setOnClickListener {
             val song = viewModel.currentSong.value ?: return@setOnClickListener
-            showSongInfo(song)
+            SongInfo.show(this, song)
         }
 
         setupSwipeGesture()
@@ -264,39 +263,6 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
                 SleepTimer.start(minutes[which])
                 updateTimerIcon()
             }
-            .show()
-    }
-
-    private fun showSongInfo(song: Song) {
-        val retriever = MediaMetadataRetriever()
-        var bitrate = "Unknown"
-        var fileSize = "Unknown"
-        try {
-            retriever.setDataSource(requireContext(), song.uri)
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.let {
-                bitrate = "${it.toLongOrNull()?.div(1000) ?: "?"} kbps"
-            }
-        } catch (_: Exception) {
-        } finally {
-            retriever.release()
-        }
-        try {
-            requireContext().contentResolver.openFileDescriptor(song.uri, "r")?.use {
-                val b = it.statSize
-                fileSize = when {
-                    b >= 1_000_000 -> "%.1f MB".format(b / 1_000_000f)
-                    b >= 1_000 -> "%.1f KB".format(b / 1_000f)
-                    else -> "$b B"
-                }
-            }
-        } catch (_: Exception) {}
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Song Info")
-            .setMessage(
-                "Title: ${song.title}\nArtist: ${song.artist}\nAlbum: ${song.album}\n" +
-                "Duration: ${song.durationFormatted}\nBitrate: $bitrate\nSize: $fileSize"
-            )
-            .setPositiveButton("Close", null)
             .show()
     }
 
