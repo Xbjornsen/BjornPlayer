@@ -2,11 +2,17 @@ package com.bjorntech.player
 
 import android.content.Context
 import androidx.core.content.edit
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 
 object FavouritesManager {
 
     private const val PREFS = "favourites"
     private const val KEY = "ids"
+
+    private val _changes = MutableLiveData(0)
+    /** Bumps on every toggle so open screens (e.g. the Favourites tab) can refresh. */
+    val changes: LiveData<Int> = _changes
 
     private fun ids(context: Context): MutableSet<String> =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -25,6 +31,7 @@ object FavouritesManager {
         val key = id.toString()
         if (set.contains(key)) set.remove(key) else set.add(key)
         save(context, set)
+        _changes.value = (_changes.value ?: 0) + 1
         return set.contains(key)
     }
 }

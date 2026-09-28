@@ -5,7 +5,6 @@ import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Drawable
-import android.media.MediaMetadataRetriever
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -44,13 +43,14 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     private val controller: androidx.media3.session.MediaController?
         get() = (activity as? MainActivity)?.mediaController()
     private var isSeeking = false
+    /** Current sheet background, so track changes blend from it instead of flashing. */
+    private var currentBgColor: Int? = null
+    private var bgAnimator: ValueAnimator? = null
     private var isAnimating = false
 
     private val speeds = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private val speedLabels = listOf("0.75×", "1×", "1.25×", "1.5×", "2×")
     private var speedIndex = 1
-
-    private var sleepTimerRunnable: Runnable? = null
 
     companion object {
         fun newInstance(): NowPlayingFragment = NowPlayingFragment()
@@ -110,6 +110,12 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
         _binding?.npBtnSpeed?.text = speedLabels[speedIndex]
         val speedColor = if (speedIndex == 1) R.color.text_secondary else R.color.accent
         _binding?.npBtnSpeed?.setTextColor(resources.getColor(speedColor, context?.theme))
+        updateTimerIcon()
+    }
+
+    private fun updateTimerIcon() {
+        val color = if (SleepTimer.isActive) R.color.accent else R.color.text_secondary
+        _binding?.npBtnTimer?.setColorFilter(resources.getColor(color, context?.theme))
     }
 
     override fun onStart() {
@@ -198,7 +204,7 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
 
         binding.npBtnInfo.setOnClickListener {
             val song = viewModel.currentSong.value ?: return@setOnClickListener
-            showSongInfo(song)
+            SongInfo.show(this, song)
         }
 
         setupSwipeGesture()
@@ -217,18 +223,35 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
                     _binding?.npAlbumArt?.setImageBitmap(resource)
                     Palette.from(resource).generate { palette ->
                         val dominant = palette?.dominantSwatch?.rgb ?: return@generate
-                        val blended = blendColors(surfaceColor, dominant, 0.12f)
-                        ValueAnimator.ofObject(ArgbEvaluator(), surfaceColor, blended).apply {
-                            duration = 600
-                            addUpdateListener { _binding?.root?.setBackgroundColor(it.animatedValue as Int) }
-                        }.start()
+                        animateBackgroundTo(blendColors(surfaceColor, dominant, 0.12f))
                     }
                 }
 
                 override fun onLoadCleared(placeholder: Drawable?) {
                     _binding?.npAlbumArt?.setImageDrawable(placeholder)
                 }
+
+                override fun onLoadFailed(errorDrawable: Drawable?) {
+                    _binding?.npAlbumArt?.setImageDrawable(errorDrawable)
+                    animateBackgroundTo(surfaceColor)   // no art: settle back to plain surface
+                }
             })
+    }
+
+    private fun animateBackgroundTo(target: Int) {
+        if (_binding == null) return
+        val from = currentBgColor ?: resources.getColor(R.color.surface, context?.theme)
+        if (from == target) return
+        bgAnimator?.cancel()
+        bgAnimator = ValueAnimator.ofObject(ArgbEvaluator(), from, target).apply {
+            duration = 600
+            addUpdateListener {
+                val c = it.animatedValue as Int
+                currentBgColor = c
+                _binding?.root?.setBackgroundColor(c)
+            }
+            start()
+        }
     }
 
     private fun blendColors(base: Int, overlay: Int, ratio: Float): Int {
@@ -250,57 +273,16 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     private fun showSleepTimerDialog() {
         val options = arrayOf("Off", "5 minutes", "15 minutes", "30 minutes", "60 minutes")
         val minutes = intArrayOf(0, 5, 15, 30, 60)
+        val title = if (SleepTimer.isActive)
+            "Sleep Timer (${SleepTimer.minutesRemaining()} min left)" else "Sleep Timer"
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Sleep Timer")
+            .setTitle(title)
             .setItems(options) { _, which ->
-                cancelSleepTimer()
-                if (minutes[which] > 0) {
-                    val runnable = Runnable { controller?.pause() }
-                    sleepTimerRunnable = runnable
-                    handler.postDelayed(runnable, minutes[which] * 60_000L)
-                    _binding?.npBtnTimer?.setColorFilter(resources.getColor(R.color.accent, context?.theme))
-                } else {
-                    _binding?.npBtnTimer?.setColorFilter(resources.getColor(R.color.text_secondary, context?.theme))
-                }
+                // Lives in SleepTimer (tied to the service's player), so it survives the
+                // sheet closing and the screen turning off.
+                SleepTimer.start(minutes[which])
+                updateTimerIcon()
             }
-            .show()
-    }
-
-    private fun cancelSleepTimer() {
-        sleepTimerRunnable?.let { handler.removeCallbacks(it) }
-        sleepTimerRunnable = null
-    }
-
-    private fun showSongInfo(song: Song) {
-        val retriever = MediaMetadataRetriever()
-        var bitrate = "Unknown"
-        var fileSize = "Unknown"
-        try {
-            retriever.setDataSource(requireContext(), song.uri)
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.let {
-                bitrate = "${it.toLongOrNull()?.div(1000) ?: "?"} kbps"
-            }
-        } catch (_: Exception) {
-        } finally {
-            retriever.release()
-        }
-        try {
-            requireContext().contentResolver.openFileDescriptor(song.uri, "r")?.use {
-                val b = it.statSize
-                fileSize = when {
-                    b >= 1_000_000 -> "%.1f MB".format(b / 1_000_000f)
-                    b >= 1_000 -> "%.1f KB".format(b / 1_000f)
-                    else -> "$b B"
-                }
-            }
-        } catch (_: Exception) {}
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Song Info")
-            .setMessage(
-                "Title: ${song.title}\nArtist: ${song.artist}\nAlbum: ${song.album}\n" +
-                "Duration: ${song.durationFormatted}\nBitrate: $bitrate\nSize: $fileSize"
-            )
-            .setPositiveButton("Close", null)
             .show()
     }
 
@@ -335,8 +317,10 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
                         val dx = event.rawX - startX
                         if (abs(dx) > threshold) {
                             animateSwipeOut(dx < 0) {
-                                if (dx < 0) controller?.seekToNextMediaItem()
-                                else controller?.seekToPreviousMediaItem()
+                                // Same self-healing/wrapping path as the buttons. Swipe back
+                                // always changes track (no "restart current" like the button).
+                                val act = activity as? MainActivity
+                                if (dx < 0) act?.playNext() else act?.playPrevious(forceTrackChange = true)
                             }
                         } else {
                             springBack()
@@ -424,6 +408,7 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     }
 
     override fun onDestroyView() {
+        bgAnimator?.cancel()
         handler.removeCallbacksAndMessages(null)   // listener detached in onPause
         super.onDestroyView()
         _binding = null

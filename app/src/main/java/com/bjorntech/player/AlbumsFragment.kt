@@ -36,7 +36,9 @@ class AlbumsFragment : Fragment() {
 
         viewModel.songs.observe(viewLifecycleOwner) { songs ->
             val grouped = MusicScanner.groupByAlbum(songs)
-            adapter.submitList(grouped.entries.map { GroupItem(it.key, it.value.size, it.value, R.drawable.ic_album) })
+            adapter.submitList(grouped.map { (name, list) ->
+                GroupItem(name, list.size, list, R.drawable.ic_album, list.first().albumArtUri)
+            })
         }
     }
 

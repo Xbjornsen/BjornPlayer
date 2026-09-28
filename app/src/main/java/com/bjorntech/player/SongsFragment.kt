@@ -37,6 +37,10 @@ class SongsFragment : Fragment() {
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
 
+        // The query lives in the (activity-scoped) ViewModel and outlives this view.
+        // Put it back in the box so the list is never filtered by invisible text.
+        binding.searchView.setQuery(viewModel.searchQuery.value ?: "", false)
+
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?) = false
             override fun onQueryTextChange(newText: String?): Boolean {
@@ -60,11 +64,16 @@ class SongsFragment : Fragment() {
         viewModel.isLoading.observe(viewLifecycleOwner) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
             binding.recyclerView.visibility = if (loading) View.GONE else View.VISIBLE
+            updateEmptyState()   // songs are posted before isLoading flips to false
         }
+
+        viewModel.permissionDenied.observe(viewLifecycleOwner) { updateEmptyState() }
 
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             adapter.setCurrentSong(song?.id ?: -1L)
         }
+
+        viewModel.isPlaying.observe(viewLifecycleOwner) { adapter.setPlaying(it) }
     }
 
     private fun showSortDialog() {
@@ -87,9 +96,20 @@ class SongsFragment : Fragment() {
     }
 
     private fun updateEmptyState() {
+        val b = _binding ?: return
         val songs = viewModel.filteredSongs()
         val loading = viewModel.isLoading.value ?: true
-        binding.emptyText.visibility = if (!loading && songs.isEmpty()) View.VISIBLE else View.GONE
+        val denied = viewModel.permissionDenied.value == true
+        b.emptyText.visibility = if (!loading && songs.isEmpty()) View.VISIBLE else View.GONE
+        if (denied) {
+            b.emptyText.text = "BjornPlayer needs access to your music files.\n\nTap here to grant access."
+            b.emptyText.setOnClickListener { (activity as? MainActivity)?.requestLibraryAccess() }
+        } else {
+            b.emptyText.text = if (viewModel.searchQuery.value.isNullOrEmpty())
+                "No music found on this device" else "No songs match your search"
+            b.emptyText.setOnClickListener(null)
+            b.emptyText.isClickable = false
+        }
     }
 
     override fun onDestroyView() {

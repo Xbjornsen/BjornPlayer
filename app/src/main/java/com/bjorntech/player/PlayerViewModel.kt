@@ -17,8 +17,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _isLoading = MutableLiveData(true)
     val isLoading: LiveData<Boolean> = _isLoading
 
+    /** True when the user refused audio/storage permission, so the UI can offer a retry. */
+    private val _permissionDenied = MutableLiveData(false)
+    val permissionDenied: LiveData<Boolean> = _permissionDenied
+
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> = _currentSong
+
+    private val _isPlaying = MutableLiveData(false)
+    val isPlaying: LiveData<Boolean> = _isPlaying
 
     private val _currentTab = MutableLiveData(0)
     val currentTab: LiveData<Int> = _currentTab
@@ -30,12 +37,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val sortOrder: LiveData<SortOrder> = _sortOrder
 
     fun loadMusic() {
+        _permissionDenied.value = false
         viewModelScope.launch {
             _isLoading.value = true
             val scanned = MusicScanner.scanDevice(getApplication())
             _songs.value = scanned.shuffled()   // fresh random order every session
             _isLoading.value = false
         }
+    }
+
+    /** Stop the loading spinner and flag the denial (nothing will ever load otherwise). */
+    fun onPermissionDenied() {
+        _isLoading.value = false
+        _permissionDenied.value = true
+    }
+
+    fun setPlaying(playing: Boolean) {
+        if (_isPlaying.value != playing) _isPlaying.value = playing
     }
 
     fun setCurrentSong(song: Song) {

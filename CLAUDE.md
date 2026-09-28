@@ -55,6 +55,16 @@ Key files (`app/src/main/java/com/bjorntech/player/`):
 - **FavouritesManager.kt** — favourites persisted as a `Set<String>` of ids in
   SharedPreferences.
 - **SongAdapter / GroupAdapter / QueueAdapter** — RecyclerView adapters.
+- **QueueShuffleOrder.kt** — custom `ShuffleOrder` installed on the service's ExoPlayer.
+  Fresh playlists put the tapped song first (`pendingStartIndex`, set by `playSong()`);
+  inserted items land right after their timeline predecessor, which is how "Add to queue"
+  plays next in FIFO order with shuffle on. Covered only by reasoning + a port test — keep
+  `cloneAndInsert`/`cloneAndRemove` index maths intact if you touch it.
+- **SleepTimer.kt** — process-wide timer bound to the service's player (attach/detach in
+  `PlaybackService`). Lives outside the UI so it survives the sheet closing and the
+  Activity's controller being released on screen-off.
+- **SongInfo.kt** — shared "Song Info" dialog; file reads on `Dispatchers.IO`.
+- **UpdateManager.kt** — checks GitHub Releases and installs a newer signed APK.
 
 ### Things that bite you here (important invariants)
 
@@ -69,12 +79,19 @@ Key files (`app/src/main/java/com/bjorntech/player/`):
 - Fragments use the `_binding` / `binding` nullable pattern; null it in `onDestroyView`.
   Several `Handler`-based runnables (progress, seek, sleep timer) must be removed in
   `onStop` / `onDestroyView` to avoid leaks.
-- Shuffle is force-enabled in `playSong()`; the library is also shuffled on load.
+- `playSong(song, queue, shuffle = true)`: shuffle is on for the library/favourites/auto-play
+  and off for artist/album drill-downs (album order). The library is also shuffled on load.
+- `currentQueue` is per-Activity-instance; resolve mediaIds with `resolveSong()` (falls back
+  to the library) and re-sync with `syncCurrentSongFromController()` on reconnect.
+- `pendingQueued` (MainActivity) tracks user-queued mediaIds that haven't started; it's
+  consumed in `onMediaItemTransition`.
+- The service runs in the app's main process, which is why `SleepTimer` and
+  `QueueShuffleOrder.pendingStartIndex` can be plain singletons.
 
 ## Conventions
 
 - Match the surrounding Kotlin style: ViewBinding, LiveData observers in `onViewCreated`,
   fully-qualified names used sparingly for one-off Android types.
-- No new runtime permissions or the `INTERNET` permission without explicit discussion — the
-  "zero network" property is a selling point (see README).
+- No new runtime permissions without explicit discussion. `INTERNET` exists **only** for the
+  in-app updater (GitHub Releases) — no other network use; music data never leaves the device.
 - Keep `PlaybackService` thin; playback orchestration lives in `MainActivity`.

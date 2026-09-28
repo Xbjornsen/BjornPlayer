@@ -6,6 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.activityViewModels
+import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bjorntech.player.databinding.FragmentQueueBinding
@@ -30,25 +32,44 @@ class QueueFragment : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val controller = (activity as? MainActivity)?.mediaController()
-        val allSongs = viewModel.songs.value ?: emptyList()
-        val currentIndex = controller?.currentMediaItemIndex ?: -1
-        val count = controller?.mediaItemCount ?: 0
+        val songsById = (viewModel.songs.value ?: emptyList()).associateBy { it.id.toString() }
+        val currentIndex = controller?.currentMediaItemIndex ?: C.INDEX_UNSET
 
-        val queue = (0 until count).mapNotNull { i ->
-            val mediaId = controller?.getMediaItemAt(i)?.mediaId ?: return@mapNotNull null
-            allSongs.find { it.id.toString() == mediaId }
+        // Build the list in *play* order: with shuffle on, window index order is just
+        // library order, so walk the timeline's shuffle order instead.
+        val entries = playOrder(controller).mapNotNull { windowIndex ->
+            val mediaId = controller?.getMediaItemAt(windowIndex)?.mediaId ?: return@mapNotNull null
+            songsById[mediaId]?.let { QueueEntry(windowIndex, it) }
         }
+        val currentPos = entries.indexOfFirst { it.windowIndex == currentIndex }
 
-        val adapter = QueueAdapter(currentIndex) { index ->
-            controller?.seekTo(index, 0)
+        val adapter = QueueAdapter(currentPos) { entry ->
+            controller?.seekTo(entry.windowIndex, 0)
             dismiss()
         }
 
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
-        adapter.submitList(queue)
+        adapter.submitList(entries)
 
-        if (currentIndex >= 0) binding.recyclerView.scrollToPosition(currentIndex)
+        if (currentPos >= 0) binding.recyclerView.scrollToPosition(currentPos)
+    }
+
+    /** Window indices in the order they'll play, honouring shuffle. */
+    private fun playOrder(controller: Player?): List<Int> {
+        controller ?: return emptyList()
+        val count = controller.mediaItemCount
+        val timeline = controller.currentTimeline
+        val shuffle = controller.shuffleModeEnabled
+        if (timeline.isEmpty || timeline.windowCount != count) return (0 until count).toList()
+        val order = ArrayList<Int>(count)
+        var i = timeline.getFirstWindowIndex(shuffle)
+        while (i != C.INDEX_UNSET && order.size < count) {
+            order += i
+            i = timeline.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, shuffle)
+        }
+        // Defensive: fall back to linear order if the timeline walk was incomplete.
+        return if (order.size == count) order else (0 until count).toList()
     }
 
     override fun onDestroyView() {
@@ -57,14 +78,17 @@ class QueueFragment : BottomSheetDialogFragment() {
     }
 }
 
+/** A queue row: the song plus its window index in the player's timeline. */
+data class QueueEntry(val windowIndex: Int, val song: Song)
+
 class QueueAdapter(
-    private val currentIndex: Int,
-    private val onClick: (Int) -> Unit
+    private val currentPos: Int,
+    private val onClick: (QueueEntry) -> Unit
 ) : RecyclerView.Adapter<QueueAdapter.QueueViewHolder>() {
 
-    private var items: List<Song> = emptyList()
+    private var items: List<QueueEntry> = emptyList()
 
-    fun submitList(list: List<Song>) { items = list; notifyDataSetChanged() }
+    fun submitList(list: List<QueueEntry>) { items = list; notifyDataSetChanged() }
 
     inner class QueueViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val title: TextView = itemView.findViewById(R.id.queue_title)
@@ -76,12 +100,12 @@ class QueueAdapter(
         QueueViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_queue, parent, false))
 
     override fun onBindViewHolder(holder: QueueViewHolder, position: Int) {
-        val song = items[position]
-        holder.title.text = song.title
-        holder.artist.text = song.artist
-        holder.indicator.visibility = if (position == currentIndex) View.VISIBLE else View.INVISIBLE
-        holder.itemView.alpha = if (position < currentIndex) 0.45f else 1f
-        holder.itemView.setOnClickListener { onClick(position) }
+        val entry = items[position]
+        holder.title.text = entry.song.title
+        holder.artist.text = entry.song.artist
+        holder.indicator.visibility = if (position == currentPos) View.VISIBLE else View.INVISIBLE
+        holder.itemView.alpha = if (currentPos >= 0 && position < currentPos) 0.45f else 1f
+        holder.itemView.setOnClickListener { onClick(entry) }
     }
 
     override fun getItemCount() = items.size

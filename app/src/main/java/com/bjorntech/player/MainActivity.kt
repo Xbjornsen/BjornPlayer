@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +38,9 @@ class MainActivity : AppCompatActivity() {
     private var mediaController: MediaController? = null
     private var currentQueue: List<Song> = emptyList()
 
+    /** mediaIds the user queued that haven't started yet, oldest first (FIFO). */
+    private val pendingQueued = mutableListOf<String>()
+
     /** True once we've kicked off the initial auto-play for this Activity instance. */
     private var hasAutoPlayed = false
 
@@ -49,9 +53,14 @@ class MainActivity : AppCompatActivity() {
     private val progressHandler = Handler(Looper.getMainLooper())
     private val progressRunnable = object : Runnable {
         override fun run() {
-            val mc = mediaController ?: return
-            val duration = mc.duration.takeIf { it > 0 } ?: return
-            binding.miniProgress.progress = ((mc.currentPosition * 1000L) / duration).toInt()
+            // Always reschedule: bailing out while the duration is still unknown (e.g.
+            // right after connect, before auto-play has prepared a track) used to stop
+            // this loop for good. onStop removes it.
+            mediaController?.let { mc ->
+                val duration = mc.duration
+                binding.miniProgress.progress =
+                    if (duration > 0) ((mc.currentPosition * 1000L) / duration).toInt() else 0
+            }
             progressHandler.postDelayed(this, 500)
         }
     }
@@ -63,9 +72,14 @@ class MainActivity : AppCompatActivity() {
         if (results.values.any { it }) {
             viewModel.loadMusic()
         } else {
-            Toast.makeText(this, "Storage permission needed to read music files", Toast.LENGTH_LONG).show()
+            // After a second refusal Android stops showing the dialog (no rationale);
+            // from then on the only route is the app's system settings page.
+            permissionPermanentlyDenied = results.keys.none { shouldShowRequestPermissionRationale(it) }
+            viewModel.onPermissionDenied()
         }
     }
+
+    private var permissionPermanentlyDenied = false
 
     /** Song awaiting a system delete confirmation / write permission. */
     private var pendingDeleteSong: Song? = null
@@ -94,7 +108,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupBottomNav()
+        setupBottomNav(restoring = savedInstanceState != null)
         setupNowPlayingBar()
         observeViewModel()
         checkPermissionsAndLoad()
@@ -105,6 +119,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // If we sent the user to grant "install unknown apps", finish the install on return.
         if (pendingApk != null) installPendingApk()
+        // Returning from system settings after granting library access.
+        if (viewModel.permissionDenied.value == true && hasLibraryPermission()) viewModel.loadMusic()
     }
 
     override fun onStart() {
@@ -123,6 +139,7 @@ class MainActivity : AppCompatActivity() {
 
             mediaController = controller
             controller.addListener(playerListener)
+            syncCurrentSongFromController()
             syncPlayPauseIcon()
             progressHandler.post(progressRunnable)
             maybeAutoPlay()   // songs may already be loaded — try to start
@@ -137,25 +154,40 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
     }
 
-    private fun checkPermissionsAndLoad() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    private fun libraryPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
-        val allGranted = permissions.all {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-        }
+    private fun hasLibraryPermission(): Boolean = libraryPermissions().all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
 
-        if (allGranted) {
+    private fun checkPermissionsAndLoad() {
+        if (hasLibraryPermission()) {
             viewModel.loadMusic()
         } else {
-            permissionLauncher.launch(permissions)
+            permissionLauncher.launch(libraryPermissions())
         }
     }
 
-    private fun setupBottomNav() {
+    /** "Grant access" from the empty state: re-ask, or open app settings if blocked. */
+    fun requestLibraryAccess() {
+        if (permissionPermanentlyDenied) {
+            startActivity(
+                android.content.Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", packageName, null)
+                )
+            )
+        } else {
+            permissionLauncher.launch(libraryPermissions())
+        }
+    }
+
+    private fun setupBottomNav(restoring: Boolean) {
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_songs -> {
@@ -181,11 +213,20 @@ class MainActivity : AppCompatActivity() {
                 else -> false
             }
         }
-        // Load default fragment
-        showFragment(SongsFragment())
+        // Tapping the current tab again returns from a drill-down to its list.
+        binding.bottomNav.setOnItemReselectedListener {
+            supportFragmentManager.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
+        }
+        // Load the default tab only on a fresh start. On recreation (rotation, theme
+        // change) the FragmentManager and BottomNavigationView restore themselves;
+        // replacing here showed Songs while the nav still highlighted the old tab.
+        if (!restoring) showFragment(SongsFragment())
     }
 
     private fun showFragment(fragment: androidx.fragment.app.Fragment) {
+        // Switching tabs drops any artist/album drill-down, so Back doesn't pop an
+        // old drill-down over a different tab.
+        supportFragmentManager.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
             .commit()
@@ -229,14 +270,27 @@ class MainActivity : AppCompatActivity() {
         when {
             mc.mediaItemCount == 0 -> restartFromCurrentSong()
             mc.hasNextMediaItem() -> mc.seekToNextMediaItem()
-            else -> { mc.seekTo(0, 0); mc.play() }   // wrap around at the end
+            else -> {
+                // Wrap to the first item in *play* order (shuffle-aware), not timeline index 0.
+                val first = mc.currentTimeline.getFirstWindowIndex(mc.shuffleModeEnabled)
+                mc.seekTo(if (first == androidx.media3.common.C.INDEX_UNSET) 0 else first, 0)
+                mc.play()
+            }
         }
     }
 
-    /** Skip to previous, rebuilding the queue if the session lost it. */
-    fun playPrevious() {
+    /**
+     * Previous, rebuilding the queue if the session lost it. Like most players, the
+     * button restarts the current track if more than ~3 s in (Media3's seekToPrevious);
+     * [forceTrackChange] always goes to the previous item (used by swipe).
+     */
+    fun playPrevious(forceTrackChange: Boolean = false) {
         val mc = mediaController ?: return
-        if (mc.mediaItemCount == 0) restartFromCurrentSong() else mc.seekToPreviousMediaItem()
+        when {
+            mc.mediaItemCount == 0 -> restartFromCurrentSong()
+            forceTrackChange -> mc.seekToPreviousMediaItem()
+            else -> mc.seekToPrevious()
+        }
     }
 
     /**
@@ -373,11 +427,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The listener is detached while stopped, so track changes that happened in the
+     * background (or before this Activity existed) were never seen. Pull the real
+     * current item from the session whenever we (re)connect or the library loads.
+     */
+    private fun syncCurrentSongFromController() {
+        val mediaId = mediaController?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
+        val song = resolveSong(mediaId) ?: return
+        if (viewModel.currentSong.value?.id != song.id) viewModel.setCurrentSong(song)
+    }
+
     /** Reflect the controller's real playing state on the mini-bar button. */
     private fun syncPlayPauseIcon() {
-        binding.btnPlayPause.setImageResource(
-            if (mediaController?.isPlaying == true) R.drawable.ic_pause else R.drawable.ic_play
-        )
+        val playing = mediaController?.isPlaying == true
+        binding.btnPlayPause.setImageResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play)
+        viewModel.setPlaying(playing)
     }
 
     private fun observeViewModel() {
@@ -392,8 +457,13 @@ class MainActivity : AppCompatActivity() {
                     .into(binding.nowPlayingArt)
                 if (binding.nowPlayingBar.visibility != android.view.View.VISIBLE) {
                     binding.nowPlayingBar.visibility = android.view.View.VISIBLE
-                    val pad = (170 * resources.displayMetrics.density).toInt()
-                    binding.fragmentContainer.setPadding(0, 0, 0, pad)
+                    // Pad the content so the last row clears the mini-bar, measured
+                    // from the real layout rather than a hard-coded 170dp.
+                    binding.nowPlayingBar.post {
+                        val gap = (8 * resources.displayMetrics.density).toInt()
+                        val pad = binding.root.height - binding.nowPlayingBar.top + gap
+                        if (pad > 0) binding.fragmentContainer.setPadding(0, 0, 0, pad)
+                    }
                 }
             }
         }
@@ -401,7 +471,9 @@ class MainActivity : AppCompatActivity() {
         // Once the song library finishes loading, attempt auto-play.
         // The controller may not be connected yet — maybeAutoPlay handles that.
         viewModel.songs.observe(this) { songs ->
-            if (songs.isNotEmpty()) maybeAutoPlay()
+            if (songs.isEmpty()) return@observe
+            syncCurrentSongFromController()   // library may load after the controller connects
+            maybeAutoPlay()
         }
     }
 
@@ -431,6 +503,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnPlayPause.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
+            viewModel.setPlaying(isPlaying)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -443,15 +516,38 @@ class MainActivity : AppCompatActivity() {
             // localConfiguration (and its uri) is stripped during serialisation
             // so we must never rely on item.localConfiguration?.uri here.
             val mediaId = mediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
-            val song = currentQueue.find { it.id.toString() == mediaId }
-            song?.let { viewModel.setCurrentSong(it) }
+            // Consume the user queue up to this item; landing anywhere else means the
+            // queue was skipped or finished, so new additions go after the current song.
+            val qi = pendingQueued.indexOf(mediaId)
+            if (qi >= 0) repeat(qi + 1) { pendingQueued.removeAt(0) } else pendingQueued.clear()
+            resolveSong(mediaId)?.let { viewModel.setCurrentSong(it) }
         }
     }
 
+    /**
+     * Map a mediaId back to a Song. currentQueue is only populated by playSong() in
+     * this Activity instance, so after a rotation/theme change/process restart it's
+     * empty while the service keeps playing — fall back to the full library.
+     */
+    private fun resolveSong(mediaId: String): Song? =
+        currentQueue.find { it.id.toString() == mediaId }
+            ?: viewModel.songs.value?.find { it.id.toString() == mediaId }
+
+    /**
+     * Queue a song to play after the current one and after anything queued before it.
+     * Inserting next to its timeline predecessor makes QueueShuffleOrder put it at
+     * the same spot in play order, so this works with shuffle on or off.
+     */
     fun addToQueue(song: Song) {
         val controller = mediaController ?: return
+        if (controller.mediaItemCount == 0) { playSong(song, listOf(song)); return }
         val mediaItem = buildMediaItem(song)
-        controller.addMediaItem(mediaItem)
+        val lastQueuedIndex = pendingQueued.lastOrNull()?.let { id ->
+            (0 until controller.mediaItemCount).firstOrNull { controller.getMediaItemAt(it).mediaId == id }
+        }
+        val insertAt = (lastQueuedIndex ?: controller.currentMediaItemIndex) + 1
+        controller.addMediaItem(insertAt, mediaItem)
+        pendingQueued += song.id.toString()
         // Keep currentQueue in sync so onMediaItemTransition can resolve this song
         if (currentQueue.none { it.id == song.id }) {
             currentQueue = currentQueue + song
@@ -459,15 +555,21 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "${song.title} added to queue", Toast.LENGTH_SHORT).show()
     }
 
-    fun playSong(song: Song, queue: List<Song>) {
+    /**
+     * Replace the queue and start [song]. [shuffle] true for the library/favourites
+     * (and auto-play); false for artist/album drill-downs, which play in order.
+     */
+    fun playSong(song: Song, queue: List<Song>, shuffle: Boolean = true) {
         currentQueue = queue
         val controller = mediaController ?: return
 
         val mediaItems = queue.map { buildMediaItem(it) }
         val startIndex = queue.indexOf(song).coerceAtLeast(0)
 
+        pendingQueued.clear()
+        QueueShuffleOrder.pendingStartIndex = startIndex   // tapped song plays first in shuffle order
         controller.setMediaItems(mediaItems, startIndex, 0)
-        controller.shuffleModeEnabled = true
+        controller.shuffleModeEnabled = shuffle
         controller.prepare()
         controller.play()
         viewModel.setCurrentSong(song)
