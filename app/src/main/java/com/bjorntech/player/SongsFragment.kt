@@ -66,6 +66,8 @@ class SongsFragment : Fragment() {
             binding.recyclerView.visibility = if (loading) View.GONE else View.VISIBLE
         }
 
+        viewModel.permissionDenied.observe(viewLifecycleOwner) { updateEmptyState() }
+
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             adapter.setCurrentSong(song?.id ?: -1L)
         }
@@ -91,9 +93,20 @@ class SongsFragment : Fragment() {
     }
 
     private fun updateEmptyState() {
+        val b = _binding ?: return
         val songs = viewModel.filteredSongs()
         val loading = viewModel.isLoading.value ?: true
-        binding.emptyText.visibility = if (!loading && songs.isEmpty()) View.VISIBLE else View.GONE
+        val denied = viewModel.permissionDenied.value == true
+        b.emptyText.visibility = if (!loading && songs.isEmpty()) View.VISIBLE else View.GONE
+        if (denied) {
+            b.emptyText.text = "BjornPlayer needs access to your music files.\n\nTap here to grant access."
+            b.emptyText.setOnClickListener { (activity as? MainActivity)?.requestLibraryAccess() }
+        } else {
+            b.emptyText.text = if (viewModel.searchQuery.value.isNullOrEmpty())
+                "No music found on this device" else "No songs match your search"
+            b.emptyText.setOnClickListener(null)
+            b.emptyText.isClickable = false
+        }
     }
 
     override fun onDestroyView() {

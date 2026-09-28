@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -68,9 +69,14 @@ class MainActivity : AppCompatActivity() {
         if (results.values.any { it }) {
             viewModel.loadMusic()
         } else {
-            Toast.makeText(this, "Storage permission needed to read music files", Toast.LENGTH_LONG).show()
+            // After a second refusal Android stops showing the dialog (no rationale);
+            // from then on the only route is the app's system settings page.
+            permissionPermanentlyDenied = results.keys.none { shouldShowRequestPermissionRationale(it) }
+            viewModel.onPermissionDenied()
         }
     }
+
+    private var permissionPermanentlyDenied = false
 
     /** Song awaiting a system delete confirmation / write permission. */
     private var pendingDeleteSong: Song? = null
@@ -110,6 +116,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // If we sent the user to grant "install unknown apps", finish the install on return.
         if (pendingApk != null) installPendingApk()
+        // Returning from system settings after granting library access.
+        if (viewModel.permissionDenied.value == true && hasLibraryPermission()) viewModel.loadMusic()
     }
 
     override fun onStart() {
@@ -143,21 +151,36 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
     }
 
-    private fun checkPermissionsAndLoad() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    private fun libraryPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
-        val allGranted = permissions.all {
-            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-        }
+    private fun hasLibraryPermission(): Boolean = libraryPermissions().all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
 
-        if (allGranted) {
+    private fun checkPermissionsAndLoad() {
+        if (hasLibraryPermission()) {
             viewModel.loadMusic()
         } else {
-            permissionLauncher.launch(permissions)
+            permissionLauncher.launch(libraryPermissions())
+        }
+    }
+
+    /** "Grant access" from the empty state: re-ask, or open app settings if blocked. */
+    fun requestLibraryAccess() {
+        if (permissionPermanentlyDenied) {
+            startActivity(
+                android.content.Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", packageName, null)
+                )
+            )
+        } else {
+            permissionLauncher.launch(libraryPermissions())
         }
     }
 
