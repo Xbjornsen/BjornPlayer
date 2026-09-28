@@ -38,6 +38,9 @@ class MainActivity : AppCompatActivity() {
     private var mediaController: MediaController? = null
     private var currentQueue: List<Song> = emptyList()
 
+    /** mediaIds the user queued that haven't started yet, oldest first (FIFO). */
+    private val pendingQueued = mutableListOf<String>()
+
     /** True once we've kicked off the initial auto-play for this Activity instance. */
     private var hasAutoPlayed = false
 
@@ -260,7 +263,12 @@ class MainActivity : AppCompatActivity() {
         when {
             mc.mediaItemCount == 0 -> restartFromCurrentSong()
             mc.hasNextMediaItem() -> mc.seekToNextMediaItem()
-            else -> { mc.seekTo(0, 0); mc.play() }   // wrap around at the end
+            else -> {
+                // Wrap to the first item in *play* order (shuffle-aware), not timeline index 0.
+                val first = mc.currentTimeline.getFirstWindowIndex(mc.shuffleModeEnabled)
+                mc.seekTo(if (first == androidx.media3.common.C.INDEX_UNSET) 0 else first, 0)
+                mc.play()
+            }
         }
     }
 
@@ -487,6 +495,10 @@ class MainActivity : AppCompatActivity() {
             // localConfiguration (and its uri) is stripped during serialisation
             // so we must never rely on item.localConfiguration?.uri here.
             val mediaId = mediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
+            // Consume the user queue up to this item; landing anywhere else means the
+            // queue was skipped or finished, so new additions go after the current song.
+            val qi = pendingQueued.indexOf(mediaId)
+            if (qi >= 0) repeat(qi + 1) { pendingQueued.removeAt(0) } else pendingQueued.clear()
             resolveSong(mediaId)?.let { viewModel.setCurrentSong(it) }
         }
     }
@@ -500,10 +512,21 @@ class MainActivity : AppCompatActivity() {
         currentQueue.find { it.id.toString() == mediaId }
             ?: viewModel.songs.value?.find { it.id.toString() == mediaId }
 
+    /**
+     * Queue a song to play after the current one and after anything queued before it.
+     * Inserting next to its timeline predecessor makes QueueShuffleOrder put it at
+     * the same spot in play order, so this works with shuffle on or off.
+     */
     fun addToQueue(song: Song) {
         val controller = mediaController ?: return
+        if (controller.mediaItemCount == 0) { playSong(song, listOf(song)); return }
         val mediaItem = buildMediaItem(song)
-        controller.addMediaItem(mediaItem)
+        val lastQueuedIndex = pendingQueued.lastOrNull()?.let { id ->
+            (0 until controller.mediaItemCount).firstOrNull { controller.getMediaItemAt(it).mediaId == id }
+        }
+        val insertAt = (lastQueuedIndex ?: controller.currentMediaItemIndex) + 1
+        controller.addMediaItem(insertAt, mediaItem)
+        pendingQueued += song.id.toString()
         // Keep currentQueue in sync so onMediaItemTransition can resolve this song
         if (currentQueue.none { it.id == song.id }) {
             currentQueue = currentQueue + song
@@ -518,6 +541,8 @@ class MainActivity : AppCompatActivity() {
         val mediaItems = queue.map { buildMediaItem(it) }
         val startIndex = queue.indexOf(song).coerceAtLeast(0)
 
+        pendingQueued.clear()
+        QueueShuffleOrder.pendingStartIndex = startIndex   // tapped song plays first in shuffle order
         controller.setMediaItems(mediaItems, startIndex, 0)
         controller.shuffleModeEnabled = true
         controller.prepare()
