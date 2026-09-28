@@ -27,6 +27,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _isPlaying = MutableLiveData(false)
     val isPlaying: LiveData<Boolean> = _isPlaying
 
+    /** Bumped each time MainActivity (re)connects its MediaController. */
+    private val _controllerGeneration = MutableLiveData(0)
+    val controllerGeneration: LiveData<Int> = _controllerGeneration
+
+    fun onControllerConnected() {
+        _controllerGeneration.value = (_controllerGeneration.value ?: 0) + 1
+    }
+
     private val _currentTab = MutableLiveData(0)
     val currentTab: LiveData<Int> = _currentTab
 
