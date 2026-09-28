@@ -49,9 +49,14 @@ class MainActivity : AppCompatActivity() {
     private val progressHandler = Handler(Looper.getMainLooper())
     private val progressRunnable = object : Runnable {
         override fun run() {
-            val mc = mediaController ?: return
-            val duration = mc.duration.takeIf { it > 0 } ?: return
-            binding.miniProgress.progress = ((mc.currentPosition * 1000L) / duration).toInt()
+            // Always reschedule: bailing out while the duration is still unknown (e.g.
+            // right after connect, before auto-play has prepared a track) used to stop
+            // this loop for good. onStop removes it.
+            mediaController?.let { mc ->
+                val duration = mc.duration
+                binding.miniProgress.progress =
+                    if (duration > 0) ((mc.currentPosition * 1000L) / duration).toInt() else 0
+            }
             progressHandler.postDelayed(this, 500)
         }
     }
