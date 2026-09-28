@@ -98,8 +98,10 @@ class GroupAdapter(
         icon.setImageResource(item.iconRes)
         item.artUri?.let { uri ->
             Glide.with(icon).load(uri).circleCrop()
+                .placeholder(item.iconRes)
+                .error(item.iconRes)
                 .listener(object : RequestListener<Drawable> {
-                    override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirst: Boolean) = true
+                    override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirst: Boolean) = false
                     override fun onResourceReady(resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirst: Boolean): Boolean {
                         icon.imageTintList = null
                         icon.setPadding(0, 0, 0, 0)
