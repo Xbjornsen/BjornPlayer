@@ -43,6 +43,9 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     private val controller: androidx.media3.session.MediaController?
         get() = (activity as? MainActivity)?.mediaController()
     private var isSeeking = false
+    /** Current sheet background, so track changes blend from it instead of flashing. */
+    private var currentBgColor: Int? = null
+    private var bgAnimator: ValueAnimator? = null
     private var isAnimating = false
 
     private val speeds = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
@@ -220,18 +223,35 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
                     _binding?.npAlbumArt?.setImageBitmap(resource)
                     Palette.from(resource).generate { palette ->
                         val dominant = palette?.dominantSwatch?.rgb ?: return@generate
-                        val blended = blendColors(surfaceColor, dominant, 0.12f)
-                        ValueAnimator.ofObject(ArgbEvaluator(), surfaceColor, blended).apply {
-                            duration = 600
-                            addUpdateListener { _binding?.root?.setBackgroundColor(it.animatedValue as Int) }
-                        }.start()
+                        animateBackgroundTo(blendColors(surfaceColor, dominant, 0.12f))
                     }
                 }
 
                 override fun onLoadCleared(placeholder: Drawable?) {
                     _binding?.npAlbumArt?.setImageDrawable(placeholder)
                 }
+
+                override fun onLoadFailed(errorDrawable: Drawable?) {
+                    _binding?.npAlbumArt?.setImageDrawable(errorDrawable)
+                    animateBackgroundTo(surfaceColor)   // no art: settle back to plain surface
+                }
             })
+    }
+
+    private fun animateBackgroundTo(target: Int) {
+        if (_binding == null) return
+        val from = currentBgColor ?: resources.getColor(R.color.surface, context?.theme)
+        if (from == target) return
+        bgAnimator?.cancel()
+        bgAnimator = ValueAnimator.ofObject(ArgbEvaluator(), from, target).apply {
+            duration = 600
+            addUpdateListener {
+                val c = it.animatedValue as Int
+                currentBgColor = c
+                _binding?.root?.setBackgroundColor(c)
+            }
+            start()
+        }
     }
 
     private fun blendColors(base: Int, overlay: Int, ratio: Float): Int {
@@ -388,6 +408,7 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     }
 
     override fun onDestroyView() {
+        bgAnimator?.cancel()
         handler.removeCallbacksAndMessages(null)   // listener detached in onPause
         super.onDestroyView()
         _binding = null
