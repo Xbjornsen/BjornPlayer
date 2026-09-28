@@ -567,7 +567,7 @@ class MainActivity : AppCompatActivity() {
         val startIndex = queue.indexOf(song).coerceAtLeast(0)
 
         pendingQueued.clear()
-        QueueShuffleOrder.pendingStartIndex = startIndex   // tapped song plays first in shuffle order
+        // startIndex also reaches QueueShuffleOrder.cloneAndSet, so it plays first when shuffled.
         controller.setMediaItems(mediaItems, startIndex, 0)
         controller.shuffleModeEnabled = shuffle
         controller.prepare()

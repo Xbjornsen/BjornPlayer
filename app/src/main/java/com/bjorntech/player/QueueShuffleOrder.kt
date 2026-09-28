@@ -9,18 +9,15 @@ import java.util.Random
 /**
  * Shuffle order tuned for a music library with a user queue.
  *
- * ExoPlayer's DefaultShuffleOrder has two problems for us:
- *  1. On a fresh playlist, the song the user tapped lands at a random point in the
- *     shuffle order, and everything before it never plays (until repeat-all).
- *     We put [pendingStartIndex] first instead.
- *  2. Items added later are inserted at random shuffle positions, so "Add to
- *     queue" could mean "play in 900 songs' time". We place inserted items right
- *     after their timeline predecessor. MainActivity inserts queued songs directly
- *     after the current item (or after the last queued one), so the queue plays
- *     next, in the order it was added.
+ *  1. On a fresh playlist (setMediaItems → [cloneAndSet]) the song the user tapped
+ *     plays first, so the rest of the library follows it in shuffled order instead
+ *     of part of it being skipped.
+ *  2. Items added later are placed right after their timeline predecessor (the
+ *     DefaultShuffleOrder puts them at random positions), so "Add to queue" means
+ *     "play next". MainActivity inserts queued songs directly after the current
+ *     item (or after the last queued one), so the queue plays in the order added.
  *
- * PlaybackService installs this on its ExoPlayer; it's in-process, so MainActivity
- * sets [pendingStartIndex] just before calling setMediaItems().
+ * Installed on the ExoPlayer in PlaybackService. Unit-tested in QueueShuffleOrderTest.
  */
 @OptIn(UnstableApi::class)
 class QueueShuffleOrder private constructor(
@@ -29,18 +26,12 @@ class QueueShuffleOrder private constructor(
 ) : ShuffleOrder {
 
     companion object {
-        /** Timeline index to play first on the next fresh playlist; consumed once. */
-        @Volatile
-        var pendingStartIndex: Int = C.INDEX_UNSET
-
-        private fun freshShuffle(length: Int, random: Random): IntArray {
+        private fun freshShuffle(length: Int, random: Random, start: Int = C.INDEX_UNSET): IntArray {
             val a = IntArray(length) { it }
             for (i in length - 1 downTo 1) {
                 val j = random.nextInt(i + 1)
                 val t = a[i]; a[i] = a[j]; a[j] = t
             }
-            val start = pendingStartIndex
-            pendingStartIndex = C.INDEX_UNSET
             if (start in 0 until length) {
                 val pos = a.indexOf(start)
                 a[pos] = a[0]; a[0] = start
@@ -103,4 +94,26 @@ class QueueShuffleOrder private constructor(
     }
 
     override fun cloneAndClear(): ShuffleOrder = QueueShuffleOrder(IntArray(0), random)
+
+    /** New playlist (setMediaItems): fresh shuffle with the tapped item first. */
+    override fun cloneAndSet(insertionCount: Int, startIndex: Int): ShuffleOrder =
+        QueueShuffleOrder(freshShuffle(insertionCount, random, startIndex), random)
+
+    /**
+     * Timeline items [indexFrom, indexToExclusive) moved to start at [newIndexFrom].
+     * Play order is unchanged; only the timeline indices are renumbered. (The
+     * interface default returns `this`, which would leave stale indices.)
+     */
+    override fun cloneAndMove(indexFrom: Int, indexToExclusive: Int, newIndexFrom: Int): ShuffleOrder {
+        if (indexFrom == newIndexFrom || indexFrom == indexToExclusive) return this
+        val n = shuffled.size
+        val count = indexToExclusive - indexFrom
+        // Rebuild the timeline permutation, then map each old index to its new one.
+        val timeline = (0 until n).toMutableList()
+        val moved = timeline.subList(indexFrom, indexToExclusive).toList()
+        repeat(count) { timeline.removeAt(indexFrom) }
+        timeline.addAll(newIndexFrom, moved)
+        val newIndexOf = IntArray(n).also { for (newI in 0 until n) it[timeline[newI]] = newI }
+        return QueueShuffleOrder(IntArray(n) { newIndexOf[shuffled[it]] }, random)
+    }
 }

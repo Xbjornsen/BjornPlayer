@@ -13,14 +13,16 @@ Single-module Gradle project, Kotlin, Views + ViewBinding (no Compose).
 - Windows host, PowerShell shell. Use `.\gradlew.bat` (a `gradlew` wrapper also exists).
 - Build debug APK: `.\gradlew.bat assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
 - Build release APK: `.\gradlew.bat assembleRelease`
-- There are no unit/instrumented tests in the project yet. "Verifying" means building
-  successfully and (ideally) installing on a device.
+- Unit tests (plain JVM, `app/src/test`): `.\gradlew.bat testDebugUnitTest`. CI runs them on
+  every push/PR. No instrumented tests; beyond that, "verifying" means building and
+  installing on a device.
 - CI: `.github/workflows/build.yml` builds the debug APK on push to `master` and on PRs,
   and creates a GitHub Release with the APK attached when a `v*` tag is pushed.
 
 ### SDK / toolchain
-- `compileSdk` / `targetSdk` = 34, `minSdk` = 26 (Android 8.0 Oreo).
-- Java/Kotlin target = 1.8. AGP 8.3.2, Kotlin 1.9.22, Gradle wrapper.
+- `compileSdk` = 36, `targetSdk` = 34, `minSdk` = 26 (Android 8.0 Oreo). Raising targetSdk to
+  35+ enforces edge-to-edge on Android 15+ — needs inset handling first.
+- Java/Kotlin target = 17. AGP 8.13.0, Kotlin 2.2.21, Gradle 8.13 wrapper, Media3 1.11.1.
 - App id / namespace: `com.bjorntech.player`. Version in `app/build.gradle`
   (`versionCode` / `versionName`).
 
@@ -56,10 +58,10 @@ Key files (`app/src/main/java/com/bjorntech/player/`):
   SharedPreferences.
 - **SongAdapter / GroupAdapter / QueueAdapter** — RecyclerView adapters.
 - **QueueShuffleOrder.kt** — custom `ShuffleOrder` installed on the service's ExoPlayer.
-  Fresh playlists put the tapped song first (`pendingStartIndex`, set by `playSong()`);
+  Fresh playlists (`cloneAndSet`) put the tapped song first;
   inserted items land right after their timeline predecessor, which is how "Add to queue"
-  plays next in FIFO order with shuffle on. Covered only by reasoning + a port test — keep
-  `cloneAndInsert`/`cloneAndRemove` index maths intact if you touch it.
+  plays next in FIFO order with shuffle on. Unit-tested in `app/src/test` (QueueShuffleOrderTest);
+  run `.\gradlew.bat testDebugUnitTest` after touching the index maths.
 - **SleepTimer.kt** — process-wide timer bound to the service's player (attach/detach in
   `PlaybackService`). Lives outside the UI so it survives the sheet closing and the
   Activity's controller being released on screen-off.
@@ -85,8 +87,8 @@ Key files (`app/src/main/java/com/bjorntech/player/`):
   to the library) and re-sync with `syncCurrentSongFromController()` on reconnect.
 - `pendingQueued` (MainActivity) tracks user-queued mediaIds that haven't started; it's
   consumed in `onMediaItemTransition`.
-- The service runs in the app's main process, which is why `SleepTimer` and
-  `QueueShuffleOrder.pendingStartIndex` can be plain singletons.
+- The service runs in the app's main process, which is why `SleepTimer` can be a plain
+  singleton.
 
 ## Conventions
 

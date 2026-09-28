@@ -2,15 +2,11 @@ package com.bjorntech.player
 
 import androidx.media3.common.C
 import androidx.media3.exoplayer.source.ShuffleOrder
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Random
 
 class QueueShuffleOrderTest {
-
-    @After
-    fun reset() { QueueShuffleOrder.pendingStartIndex = C.INDEX_UNSET }
 
     /** Full play order as timeline indices, walking getFirstIndex/getNextIndex. */
     private fun ShuffleOrder.playOrder(): List<Int> {
@@ -30,11 +26,9 @@ class QueueShuffleOrderTest {
         assertEquals(fwd.reversed(), back)
     }
 
-    private fun fresh(length: Int, start: Int = C.INDEX_UNSET, seed: Long = 1): ShuffleOrder {
-        QueueShuffleOrder.pendingStartIndex = start
-        // How ExoPlayer builds a new playlist: clear, then insert everything.
-        return QueueShuffleOrder(0, Random(seed)).cloneAndClear().cloneAndInsert(0, length)
-    }
+    /** How ExoPlayer builds a new playlist from setMediaItems(items, startIndex, …). */
+    private fun fresh(length: Int, start: Int = C.INDEX_UNSET, seed: Long = 1): ShuffleOrder =
+        QueueShuffleOrder(0, Random(seed)).cloneAndSet(length, start)
 
     @Test
     fun emptyOrderHasNoIndices() {
@@ -60,9 +54,26 @@ class QueueShuffleOrderTest {
     }
 
     @Test
-    fun startIndexIsConsumedOnce() {
-        fresh(10, start = 7)
-        assertEquals(C.INDEX_UNSET, QueueShuffleOrder.pendingStartIndex)
+    fun outOfRangeStartIndexIsIgnored() {
+        fresh(5, start = 9).assertConsistent()
+        fresh(0, start = 0).assertConsistent()
+    }
+
+    @Test
+    fun moveRenumbersWithoutChangingPlayOrder() {
+        val cases = listOf(Triple(2, 5, 0), Triple(0, 3, 7), Triple(4, 5, 9), Triple(6, 9, 1))
+        for ((from, to, newFrom) in cases) {
+            val o = fresh(10, seed = 5)
+            // Track items by label through the same move applied to a plain list.
+            val labels = (0 until 10).toMutableList()
+            val before = o.playOrder().map { labels[it] }
+            val moved = labels.subList(from, to).toList()
+            repeat(to - from) { labels.removeAt(from) }
+            labels.addAll(newFrom, moved)
+            val m = o.cloneAndMove(from, to, newFrom)
+            m.assertConsistent()
+            assertEquals(before, m.playOrder().map { labels[it] })
+        }
     }
 
     @Test
@@ -116,10 +127,8 @@ class QueueShuffleOrderTest {
     fun removingEverythingThenInsertingShufflesAfresh() {
         val emptied = fresh(10, seed = 4).cloneAndRemove(0, 10)
         assertEquals(0, emptied.length)
-        QueueShuffleOrder.pendingStartIndex = 3
         val refilled = emptied.cloneAndInsert(0, 6)
         refilled.assertConsistent()
         assertEquals(6, refilled.length)
-        assertEquals(3, refilled.firstIndex)
     }
 }
