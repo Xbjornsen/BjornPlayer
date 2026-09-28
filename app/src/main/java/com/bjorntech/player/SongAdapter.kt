@@ -20,6 +20,15 @@ class SongAdapter(
 
     private var fullList: List<Song> = emptyList()
     var currentSongId: Long = -1L
+    private var isPlaying: Boolean = false
+
+    /** Animate the current row's equalizer only while audio is actually playing. */
+    fun setPlaying(playing: Boolean) {
+        if (isPlaying == playing) return
+        isPlaying = playing
+        val pos = currentList.indexOfFirst { it.id == currentSongId }
+        if (pos >= 0) notifyItemChanged(pos)
+    }
 
     fun submitFullList(songs: List<Song>) {
         fullList = songs
@@ -56,7 +65,7 @@ class SongAdapter(
         if (isCurrent) {
             holder.duration.visibility = View.GONE
             holder.equalizer.visibility = View.VISIBLE
-            holder.equalizer.isAnimating = true
+            holder.equalizer.isAnimating = isPlaying
             holder.itemView.setBackgroundResource(R.drawable.bg_row_current)
         } else {
             holder.duration.text = song.durationFormatted

@@ -440,9 +440,9 @@ class MainActivity : AppCompatActivity() {
 
     /** Reflect the controller's real playing state on the mini-bar button. */
     private fun syncPlayPauseIcon() {
-        binding.btnPlayPause.setImageResource(
-            if (mediaController?.isPlaying == true) R.drawable.ic_pause else R.drawable.ic_play
-        )
+        val playing = mediaController?.isPlaying == true
+        binding.btnPlayPause.setImageResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play)
+        viewModel.setPlaying(playing)
     }
 
     private fun observeViewModel() {
@@ -498,6 +498,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnPlayPause.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
+            viewModel.setPlaying(isPlaying)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {

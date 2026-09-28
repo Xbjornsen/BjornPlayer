@@ -72,6 +72,8 @@ class SongsFragment : Fragment() {
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             adapter.setCurrentSong(song?.id ?: -1L)
         }
+
+        viewModel.isPlaying.observe(viewLifecycleOwner) { adapter.setPlaying(it) }
     }
 
     private fun showSortDialog() {

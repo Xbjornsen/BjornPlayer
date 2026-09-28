@@ -24,6 +24,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> = _currentSong
 
+    private val _isPlaying = MutableLiveData(false)
+    val isPlaying: LiveData<Boolean> = _isPlaying
+
     private val _currentTab = MutableLiveData(0)
     val currentTab: LiveData<Int> = _currentTab
 
@@ -47,6 +50,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun onPermissionDenied() {
         _isLoading.value = false
         _permissionDenied.value = true
+    }
+
+    fun setPlaying(playing: Boolean) {
+        if (_isPlaying.value != playing) _isPlaying.value = playing
     }
 
     fun setCurrentSong(song: Song) {
