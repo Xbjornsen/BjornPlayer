@@ -17,7 +17,8 @@ object MusicScanner {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.TRACK
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 10000"
@@ -36,6 +37,7 @@ object MusicScanner {
             val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
@@ -53,7 +55,9 @@ object MusicScanner {
                         album = cursor.getString(albumCol) ?: "Unknown Album",
                         duration = cursor.getLong(durationCol),
                         uri = songUri,
-                        albumArtUri = albumArtUri
+                        albumArtUri = albumArtUri,
+                        albumId = albumId,
+                        track = cursor.getInt(trackCol)
                     )
                 )
             }
@@ -62,11 +66,22 @@ object MusicScanner {
         songs.distinctBy { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }
     }
 
-    fun groupByArtist(songs: List<Song>): Map<String, List<Song>> {
-        return songs.groupBy { it.artist }.toSortedMap()
-    }
+    fun groupByArtist(songs: List<Song>): List<Pair<String, List<Song>>> =
+        songs.groupBy { it.artist }
+            .toList()
+            .sortedBy { it.first.lowercase() }
 
-    fun groupByAlbum(songs: List<Song>): Map<String, List<Song>> {
-        return songs.groupBy { it.album }.toSortedMap()
-    }
+    /**
+     * Group by MediaStore ALBUM_ID, not the album name, so two artists' "Greatest
+     * Hits" stay separate albums.
+     */
+    fun groupByAlbum(songs: List<Song>): List<Pair<String, List<Song>>> =
+        songs.groupBy { it.albumId }
+            .values
+            .map { it.first().album to it }
+            .sortedBy { it.first.lowercase() }
+
+    /** Album order: album, then disc/track number, then title. */
+    fun inAlbumOrder(songs: List<Song>): List<Song> =
+        songs.sortedWith(compareBy({ it.album.lowercase() }, { it.track }, { it.title.lowercase() }))
 }

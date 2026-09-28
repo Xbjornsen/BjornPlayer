@@ -9,7 +9,9 @@ data class Song(
     val album: String,
     val duration: Long,       // milliseconds
     val uri: Uri,
-    val albumArtUri: Uri?
+    val albumArtUri: Uri?,
+    val albumId: Long = 0L,
+    val track: Int = 0        // MediaStore TRACK: disc * 1000 + track number
 ) {
     val durationFormatted: String
         get() {
