@@ -128,6 +128,7 @@ class MainActivity : AppCompatActivity() {
 
             mediaController = controller
             controller.addListener(playerListener)
+            syncCurrentSongFromController()
             syncPlayPauseIcon()
             progressHandler.post(progressRunnable)
             maybeAutoPlay()   // songs may already be loaded — try to start
@@ -378,6 +379,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The listener is detached while stopped, so track changes that happened in the
+     * background (or before this Activity existed) were never seen. Pull the real
+     * current item from the session whenever we (re)connect or the library loads.
+     */
+    private fun syncCurrentSongFromController() {
+        val mediaId = mediaController?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
+        val song = resolveSong(mediaId) ?: return
+        if (viewModel.currentSong.value?.id != song.id) viewModel.setCurrentSong(song)
+    }
+
     /** Reflect the controller's real playing state on the mini-bar button. */
     private fun syncPlayPauseIcon() {
         binding.btnPlayPause.setImageResource(
@@ -406,7 +418,9 @@ class MainActivity : AppCompatActivity() {
         // Once the song library finishes loading, attempt auto-play.
         // The controller may not be connected yet — maybeAutoPlay handles that.
         viewModel.songs.observe(this) { songs ->
-            if (songs.isNotEmpty()) maybeAutoPlay()
+            if (songs.isEmpty()) return@observe
+            syncCurrentSongFromController()   // library may load after the controller connects
+            maybeAutoPlay()
         }
     }
 
