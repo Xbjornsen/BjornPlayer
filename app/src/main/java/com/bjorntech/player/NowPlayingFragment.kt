@@ -50,8 +50,6 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     private val speedLabels = listOf("0.75×", "1×", "1.25×", "1.5×", "2×")
     private var speedIndex = 1
 
-    private var sleepTimerRunnable: Runnable? = null
-
     companion object {
         fun newInstance(): NowPlayingFragment = NowPlayingFragment()
     }
@@ -110,6 +108,12 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
         _binding?.npBtnSpeed?.text = speedLabels[speedIndex]
         val speedColor = if (speedIndex == 1) R.color.text_secondary else R.color.accent
         _binding?.npBtnSpeed?.setTextColor(resources.getColor(speedColor, context?.theme))
+        updateTimerIcon()
+    }
+
+    private fun updateTimerIcon() {
+        val color = if (SleepTimer.isActive) R.color.accent else R.color.text_secondary
+        _binding?.npBtnTimer?.setColorFilter(resources.getColor(color, context?.theme))
     }
 
     override fun onStart() {
@@ -250,25 +254,17 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
     private fun showSleepTimerDialog() {
         val options = arrayOf("Off", "5 minutes", "15 minutes", "30 minutes", "60 minutes")
         val minutes = intArrayOf(0, 5, 15, 30, 60)
+        val title = if (SleepTimer.isActive)
+            "Sleep Timer (${SleepTimer.minutesRemaining()} min left)" else "Sleep Timer"
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Sleep Timer")
+            .setTitle(title)
             .setItems(options) { _, which ->
-                cancelSleepTimer()
-                if (minutes[which] > 0) {
-                    val runnable = Runnable { controller?.pause() }
-                    sleepTimerRunnable = runnable
-                    handler.postDelayed(runnable, minutes[which] * 60_000L)
-                    _binding?.npBtnTimer?.setColorFilter(resources.getColor(R.color.accent, context?.theme))
-                } else {
-                    _binding?.npBtnTimer?.setColorFilter(resources.getColor(R.color.text_secondary, context?.theme))
-                }
+                // Lives in SleepTimer (tied to the service's player), so it survives the
+                // sheet closing and the screen turning off.
+                SleepTimer.start(minutes[which])
+                updateTimerIcon()
             }
             .show()
-    }
-
-    private fun cancelSleepTimer() {
-        sleepTimerRunnable?.let { handler.removeCallbacks(it) }
-        sleepTimerRunnable = null
     }
 
     private fun showSongInfo(song: Song) {

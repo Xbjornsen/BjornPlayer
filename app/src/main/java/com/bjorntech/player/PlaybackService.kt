@@ -24,6 +24,7 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         mediaSession = MediaSession.Builder(this, player).build()
+        SleepTimer.attach(player)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -32,6 +33,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         mediaSession?.run {
+            SleepTimer.detach(player)
             player.release()
             release()
             mediaSession = null
