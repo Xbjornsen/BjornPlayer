@@ -45,6 +45,9 @@ jobs:
             echo "No keystore secret present — building unsigned release APK."
           fi
 
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
       - name: Build release APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}

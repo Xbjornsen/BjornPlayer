@@ -87,4 +87,7 @@ dependencies {
 
     // Palette for album art colour extraction
     implementation 'androidx.palette:palette-ktx:1.0.0'
+
+    // Plain JVM unit tests (app/src/test) — run by CI on every push/PR
+    testImplementation 'junit:junit:4.13.2'
 }

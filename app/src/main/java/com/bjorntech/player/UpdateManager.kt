@@ -105,7 +105,7 @@ object UpdateManager {
     }
 
     /** Numeric dotted-version compare: is [remote] strictly newer than [current]? */
-    private fun isNewer(remote: String, current: String): Boolean {
+    internal fun isNewer(remote: String, current: String): Boolean {
         val r = remote.split(".")
         val c = current.split(".")
         for (i in 0 until maxOf(r.size, c.size)) {
