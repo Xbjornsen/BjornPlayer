@@ -448,10 +448,18 @@ class MainActivity : AppCompatActivity() {
             // localConfiguration (and its uri) is stripped during serialisation
             // so we must never rely on item.localConfiguration?.uri here.
             val mediaId = mediaItem?.mediaId?.takeIf { it.isNotEmpty() } ?: return
-            val song = currentQueue.find { it.id.toString() == mediaId }
-            song?.let { viewModel.setCurrentSong(it) }
+            resolveSong(mediaId)?.let { viewModel.setCurrentSong(it) }
         }
     }
+
+    /**
+     * Map a mediaId back to a Song. currentQueue is only populated by playSong() in
+     * this Activity instance, so after a rotation/theme change/process restart it's
+     * empty while the service keeps playing — fall back to the full library.
+     */
+    private fun resolveSong(mediaId: String): Song? =
+        currentQueue.find { it.id.toString() == mediaId }
+            ?: viewModel.songs.value?.find { it.id.toString() == mediaId }
 
     fun addToQueue(song: Song) {
         val controller = mediaController ?: return
