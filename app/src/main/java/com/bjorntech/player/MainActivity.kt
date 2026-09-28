@@ -279,10 +279,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Skip to previous, rebuilding the queue if the session lost it. */
-    fun playPrevious() {
+    /**
+     * Previous, rebuilding the queue if the session lost it. Like most players, the
+     * button restarts the current track if more than ~3 s in (Media3's seekToPrevious);
+     * [forceTrackChange] always goes to the previous item (used by swipe).
+     */
+    fun playPrevious(forceTrackChange: Boolean = false) {
         val mc = mediaController ?: return
-        if (mc.mediaItemCount == 0) restartFromCurrentSong() else mc.seekToPreviousMediaItem()
+        when {
+            mc.mediaItemCount == 0 -> restartFromCurrentSong()
+            forceTrackChange -> mc.seekToPreviousMediaItem()
+            else -> mc.seekToPrevious()
+        }
     }
 
     /**

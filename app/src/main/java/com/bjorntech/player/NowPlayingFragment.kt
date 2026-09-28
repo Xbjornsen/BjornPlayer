@@ -331,8 +331,10 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
                         val dx = event.rawX - startX
                         if (abs(dx) > threshold) {
                             animateSwipeOut(dx < 0) {
-                                if (dx < 0) controller?.seekToNextMediaItem()
-                                else controller?.seekToPreviousMediaItem()
+                                // Same self-healing/wrapping path as the buttons. Swipe back
+                                // always changes track (no "restart current" like the button).
+                                val act = activity as? MainActivity
+                                if (dx < 0) act?.playNext() else act?.playPrevious(forceTrackChange = true)
                             }
                         } else {
                             springBack()
