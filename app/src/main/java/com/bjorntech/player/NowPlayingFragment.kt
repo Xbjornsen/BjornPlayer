@@ -84,16 +84,33 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        // (Re)attach to the current controller — it may have been rebuilt by the
-        // Activity while we were backgrounded — and sync all transport icons.
-        controller?.addListener(playerListener)
+    /** The controller our listener is registered on (null = not attached). */
+    private var attachedController: androidx.media3.session.MediaController? = null
+
+    /**
+     * Attach to the Activity's current controller and sync the icons. Called on
+     * resume AND whenever the Activity reconnects: after the app returns from the
+     * background the sheet resumes before the new controller has connected, so
+     * attaching only in onResume left the play/pause icon stuck.
+     */
+    private fun attachToController() {
+        val mc = controller
+        if (mc !== attachedController) {
+            attachedController?.removeListener(playerListener)
+            mc?.addListener(playerListener)
+            attachedController = mc
+        }
         syncTransportUi()
     }
 
+    override fun onResume() {
+        super.onResume()
+        attachToController()
+    }
+
     override fun onPause() {
-        controller?.removeListener(playerListener)
+        attachedController?.removeListener(playerListener)
+        attachedController = null
         super.onPause()
     }
 
@@ -135,6 +152,10 @@ class NowPlayingFragment : BottomSheetDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        viewModel.controllerGeneration.observe(viewLifecycleOwner) {
+            if (isResumed) attachToController()
+        }
 
         viewModel.currentSong.observe(viewLifecycleOwner) { song ->
             if (song != null) {

@@ -139,6 +139,7 @@ class MainActivity : AppCompatActivity() {
 
             mediaController = controller
             controller.addListener(playerListener)
+            viewModel.onControllerConnected()   // lets open sheets re-attach to the new controller
             syncCurrentSongFromController()
             syncPlayPauseIcon()
             progressHandler.post(progressRunnable)
